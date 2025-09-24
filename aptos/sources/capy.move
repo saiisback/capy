@@ -114,8 +114,8 @@ module capy::capy {
         assert!(to_address != from_address, E_INVALID_ADDRESS);
         
         // Get the global invitations state (stored at module address)
-        let account_addr = signer::address_of(account);
-        let global_invitations = borrow_global_mut<GlobalInvitations>(account_addr);
+        // The module address should be @capy, not the signer's address
+        let global_invitations = borrow_global_mut<GlobalInvitations>(@capy);
         let invitation_id = global_invitations.next_invitation_id;
         
         // Create invitation
@@ -131,12 +131,19 @@ module capy::capy {
         // Store invitation in global state
         table::add(&mut global_invitations.invitations, invitation_id, invitation);
         
-        // Add to user's invitation list
+        // Add to sender's invitation list
         if (!table::contains(&global_invitations.user_invitations, from_address)) {
             table::add(&mut global_invitations.user_invitations, from_address, vector::empty());
         };
-        let user_invitations = table::borrow_mut(&mut global_invitations.user_invitations, from_address);
-        vector::push_back(user_invitations, invitation_id);
+        let sender_invitations = table::borrow_mut(&mut global_invitations.user_invitations, from_address);
+        vector::push_back(sender_invitations, invitation_id);
+        
+        // Add to receiver's invitation list  
+        if (!table::contains(&global_invitations.user_invitations, to_address)) {
+            table::add(&mut global_invitations.user_invitations, to_address, vector::empty());
+        };
+        let receiver_invitations = table::borrow_mut(&mut global_invitations.user_invitations, to_address);
+        vector::push_back(receiver_invitations, invitation_id);
         
         // Increment invitation ID
         global_invitations.next_invitation_id = global_invitations.next_invitation_id + 1;
@@ -150,17 +157,32 @@ module capy::capy {
         });
     }
 
-    // Accept invitation - original function signature
-    public entry fun accept_invitation(account: &signer, invitation_id: u64) acquires CapyData {
+    // Accept invitation - updated to use GlobalInvitations and auto-initialize user
+    public entry fun accept_invitation(account: &signer, invitation_id: u64) acquires GlobalInvitations, CapyData {
         let account_addr = signer::address_of(account);
-        assert!(exists<CapyData>(account_addr), E_NOT_INITIALIZED);
         
-        let capy_data = borrow_global_mut<CapyData>(account_addr);
-        assert!(table::contains(&capy_data.invitations, invitation_id), E_INVITATION_NOT_FOUND);
+        // Initialize user if not already initialized
+        if (!exists<CapyData>(account_addr)) {
+            move_to(account, CapyData {
+                invitations: table::new(),
+                co_parent_pairs: table::new(),
+                user_invitations: table::new(),
+                user_pairs: table::new(),
+                next_invitation_id: 1,
+                next_pair_id: 1,
+            });
+        };
         
-        let invitation = table::borrow_mut(&mut capy_data.invitations, invitation_id);
+        // Get global invitations
+        let global_invitations = borrow_global_mut<GlobalInvitations>(@capy);
+        assert!(table::contains(&global_invitations.invitations, invitation_id), E_INVITATION_NOT_FOUND);
+        
+        let invitation = table::borrow_mut(&mut global_invitations.invitations, invitation_id);
         assert!(invitation.to == account_addr, E_NOT_AUTHORIZED);
         assert!(invitation.status == 0, E_INVITATION_ALREADY_ACCEPTED);
+        
+        // Get user's CapyData for creating co-parent pairs
+        let capy_data = borrow_global_mut<CapyData>(account_addr);
         
         // Update invitation status
         invitation.status = 1; // accepted
@@ -217,7 +239,7 @@ module capy::capy {
         let account_addr = signer::address_of(account);
         
         // Get global invitations
-        let global_invitations = borrow_global_mut<GlobalInvitations>(account_addr);
+        let global_invitations = borrow_global_mut<GlobalInvitations>(@capy);
         assert!(table::contains(&global_invitations.invitations, invitation_id), E_INVITATION_NOT_FOUND);
         
         let invitation = table::borrow_mut(&mut global_invitations.invitations, invitation_id);
