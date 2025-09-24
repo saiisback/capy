@@ -132,13 +132,20 @@
 
 /* Retro UI components */
 .retro-panel {
-  @apply bg-card text-card-foreground border-2 border-border;
+  background-color: var(--card);
+  color: var(--card-foreground);
+  border: 2px solid var(--border);
   border-style: solid;
   image-rendering: pixelated;
 }
 
 .retro-button {
-  @apply px-6 py-3 border-2 border-border font-nunito font-semibold text-sm transition-all duration-100;
+  padding: 0.75rem 1.5rem;
+  border: 2px solid var(--border);
+  font-family: var(--font-nunito);
+  font-weight: 600;
+  font-size: 0.875rem;
+  transition: all 100ms;
   border-style: solid;
   image-rendering: pixelated;
 }
@@ -163,12 +170,176 @@
 
 /* Progress bar styling for pet happiness meter */
 .retro-progress {
-  @apply bg-muted border-2 border-border h-4;
+  background-color: var(--muted);
+  border: 2px solid var(--border);
+  height: 1rem;
   border-style: solid;
   image-rendering: pixelated;
 }
 
 .retro-progress-fill {
-  @apply bg-primary h-full;
+  background-color: var(--primary);
+  height: 100%;
   image-rendering: pixelated;
+}
+
+/* Enhanced retro components */
+.retro-card {
+  background-color: var(--card);
+  color: var(--card-foreground);
+  border: 2px solid var(--border);
+  border-style: solid;
+  image-rendering: pixelated;
+  padding: 1.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.retro-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.retro-card:hover::before {
+  opacity: 1;
+}
+
+/* Pixelated animations */
+@keyframes pixel-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes pixel-glow {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.2); }
+}
+
+.pixel-bounce {
+  animation: pixel-bounce 2s ease-in-out infinite;
+}
+
+.pixel-glow {
+  animation: pixel-glow 1.5s ease-in-out infinite;
+}
+
+/* Enhanced button effects */
+.retro-button-enhanced {
+  padding: 0.75rem 1.5rem;
+  border: 2px solid var(--border);
+  font-family: var(--font-nunito);
+  font-weight: 600;
+  font-size: 0.875rem;
+  transition: all 100ms;
+  border-style: solid;
+  image-rendering: pixelated;
+  position: relative;
+  overflow: hidden;
+}
+
+.retro-button-enhanced::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  transition: left 0.5s ease;
+}
+
+.retro-button-enhanced:hover::before {
+  left: 100%;
+}
+
+/* Status indicators */
+.status-indicator {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  animation: pixel-glow 2s ease-in-out infinite;
+}
+
+.status-online {
+  background-color: var(--primary);
+}
+
+.status-busy {
+  background-color: var(--secondary);
+}
+
+.status-away {
+  background-color: var(--muted);
+}
+
+/* Enhanced retro effects */
+.retro-glow {
+  box-shadow: 
+    0 0 5px var(--primary),
+    0 0 10px var(--primary),
+    0 0 15px var(--primary);
+}
+
+.retro-shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.retro-shine::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+  transform: rotate(45deg);
+  transition: all 0.6s ease;
+  opacity: 0;
+}
+
+.retro-shine:hover::before {
+  opacity: 1;
+  animation: shine 0.6s ease-in-out;
+}
+
+@keyframes shine {
+  0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+  100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+}
+
+/* Pixelated borders for enhanced retro feel */
+.pixel-border {
+  border-image: url("data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M0 0h100v100H0z' fill='none' stroke='%23784421' stroke-width='2'/%3e%3c/svg%3e") 2;
+}
+
+/* Enhanced hover effects */
+.retro-hover {
+  transition: all 0.2s ease;
+}
+
+.retro-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+/* Animated background patterns */
+.retro-bg-pattern {
+  background-image: 
+    radial-gradient(circle at 25% 25%, rgba(120, 68, 33, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 75% 75%, rgba(220, 38, 38, 0.1) 0%, transparent 50%);
+  background-size: 40px 40px;
+  animation: pattern-move 20s linear infinite;
+}
+
+@keyframes pattern-move {
+  0% { background-position: 0 0, 0 0; }
+  100% { background-position: 40px 40px, -40px -40px; }
 }

@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useWallet } from "@/contexts/wallet-context"
 import WelcomeScreen from "@/components/welcome-screen"
 import InvitationScreen from "@/components/invitation-screen"
 import DashboardScreen from "@/components/dashboard-screen"
@@ -8,34 +9,27 @@ import DashboardScreen from "@/components/dashboard-screen"
 type AppState = 'welcome' | 'invitation' | 'dashboard'
 
 export default function CapyApp() {
+  const { connected, invitationAccepted } = useWallet()
   const [currentScreen, setCurrentScreen] = useState<AppState>('welcome')
-  const [walletConnected, setWalletConnected] = useState(false)
-  const [inviteSent, setInviteSent] = useState(false)
 
-  const handleWalletConnect = () => {
-    setWalletConnected(true)
-    setCurrentScreen('invitation')
-  }
-
-  const handleInviteSent = () => {
-    setInviteSent(true)
-  }
-
-  const handleInviteAccepted = () => {
-    setCurrentScreen('dashboard')
-  }
+  // Update screen based on wallet state
+  useEffect(() => {
+    if (!connected) {
+      setCurrentScreen('welcome')
+    } else if (connected && !invitationAccepted) {
+      setCurrentScreen('invitation')
+    } else if (connected && invitationAccepted) {
+      setCurrentScreen('dashboard')
+    }
+  }, [connected, invitationAccepted])
 
   return (
     <div className="min-h-screen bg-background">
       {currentScreen === 'welcome' && (
-        <WelcomeScreen onWalletConnect={handleWalletConnect} />
+        <WelcomeScreen />
       )}
       {currentScreen === 'invitation' && (
-        <InvitationScreen 
-          onInviteSent={handleInviteSent}
-          onInviteAccepted={handleInviteAccepted}
-          inviteSent={inviteSent}
-        />
+        <InvitationScreen />
       )}
       {currentScreen === 'dashboard' && (
         <DashboardScreen />

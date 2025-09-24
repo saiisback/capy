@@ -1,6 +1,11 @@
+"use client"
+
 import type React from "react"
 import type { Metadata } from "next"
 import { Press_Start_2P, Nunito } from "next/font/google"
+import { AptosWalletAdapterProvider } from "@aptos-labs/wallet-adapter-react"
+import { PetraWallet } from "petra-plugin-wallet-adapter"
+import { WalletProvider } from "@/contexts/wallet-context"
 import "./globals.css"
 
 const pressStart2P = Press_Start_2P({
@@ -17,10 +22,7 @@ const nunito = Nunito({
   display: "swap",
 })
 
-export const metadata: Metadata = {
-  title: "CAPY - Virtual Pet DApp",
-  description: "Adopt a pixel pet with your favorite person",
-}
+// Metadata is handled in metadata.ts since this is a client component
 
 export default function RootLayout({
   children,
@@ -38,7 +40,19 @@ html {
 }
         `}</style>
       </head>
-      <body className={`${pressStart2P.variable} ${nunito.variable} font-nunito`}>{children}</body>
+      <body className={`${pressStart2P.variable} ${nunito.variable} font-nunito`}>
+        <AptosWalletAdapterProvider 
+          plugins={[new PetraWallet()]} 
+          autoConnect={false}
+          onError={(error) => {
+            console.error('Wallet adapter error:', error)
+          }}
+        >
+          <WalletProvider>
+            {children}
+          </WalletProvider>
+        </AptosWalletAdapterProvider>
+      </body>
     </html>
   )
 }
