@@ -1,0 +1,174 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Retro pixel art color palette */
+  --background: #FFFBEB; /* Warm creamy off-white */
+  --foreground: #422006; /* Darker brown for text */
+  --card: #784421; /* Rich friendly brown for panels */
+  --card-foreground: #FFFBEB; /* Cream text on brown backgrounds */
+  --popover: #784421; /* Brown for popover backgrounds */
+  --popover-foreground: #FFFBEB; /* Cream text in popovers */
+  --primary: #DC2626; /* Soft red accent color */
+  --primary-foreground: #FFFBEB; /* Cream text on red */
+  --secondary: #D97706; /* Orange secondary */
+  --secondary-foreground: #422006; /* Dark brown text on orange */
+  --muted: #92400E; /* Muted brown */
+  --muted-foreground: #FFFBEB; /* Cream text for muted */
+  --accent: #3B82F6; /* Soft blue accent */
+  --accent-foreground: #FFFBEB; /* Cream text on blue */
+  --destructive: #DC2626; /* Red for destructive actions */
+  --destructive-foreground: #FFFBEB; /* Cream text for destructive */
+  --border: #784421; /* Brown borders */
+  --input: #FFFBEB; /* Cream for inputs */
+  --ring: #DC2626; /* Red for focus rings */
+  --chart-1: #DC2626;
+  --chart-2: #3B82F6;
+  --chart-3: #D97706;
+  --chart-4: #10B981;
+  --chart-5: #8B5CF6;
+  --radius: 0rem; /* Hard pixel-perfect edges */
+  
+  /* Font variables for retro design */
+  --font-press-start: "Press Start 2P", monospace;
+  --font-nunito: "Nunito", sans-serif;
+}
+
+.dark {
+  /* Dark mode version of retro palette */
+  --background: #422006; /* Dark brown background */
+  --foreground: #FFFBEB; /* Cream text */
+  --card: #92400E; /* Darker brown for panels */
+  --card-foreground: #FFFBEB; /* Cream text on dark brown */
+  --popover: #92400E; /* Dark brown for popovers */
+  --popover-foreground: #FFFBEB; /* Cream text in popovers */
+  --primary: #EF4444; /* Brighter red accent */
+  --primary-foreground: #FFFBEB; /* Cream text on red */
+  --secondary: #F59E0B; /* Brighter orange */
+  --secondary-foreground: #422006; /* Dark brown text on orange */
+  --muted: #784421; /* Muted brown */
+  --muted-foreground: #FFFBEB; /* Cream text for muted */
+  --accent: #60A5FA; /* Brighter blue accent */
+  --accent-foreground: #422006; /* Dark brown text on blue */
+  --destructive: #EF4444; /* Bright red for destructive */
+  --destructive-foreground: #FFFBEB; /* Cream text for destructive */
+  --border: #FFFBEB; /* Cream borders */
+  --input: #784421; /* Brown for inputs */
+  --ring: #EF4444; /* Red for focus rings */
+  --chart-1: #EF4444;
+  --chart-2: #60A5FA;
+  --chart-3: #F59E0B;
+  --chart-4: #34D399;
+  --chart-5: #A78BFA;
+  
+  /* Font variables remain the same */
+  --font-press-start: "Press Start 2P", monospace;
+  --font-nunito: "Nunito", sans-serif;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  /* Font configuration for retro design */
+  --font-press-start: var(--font-press-start);
+  --font-nunito: var(--font-nunito);
+  --font-sans: var(--font-nunito);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    /* Set Nunito as the default font family */
+    font-family: var(--font-nunito);
+  }
+  
+  /* Pixel-perfect image rendering */
+  img {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+  }
+}
+
+/* Retro font classes */
+.font-pixel {
+  font-family: var(--font-press-start);
+}
+
+.font-nunito {
+  font-family: var(--font-nunito);
+}
+
+/* Retro UI components */
+.retro-panel {
+  @apply bg-card text-card-foreground border-2 border-border;
+  border-style: solid;
+  image-rendering: pixelated;
+}
+
+.retro-button {
+  @apply px-6 py-3 border-2 border-border font-nunito font-semibold text-sm transition-all duration-100;
+  border-style: solid;
+  image-rendering: pixelated;
+}
+
+.retro-button:hover {
+  transform: translate(1px, 1px);
+  box-shadow: -1px -1px 0 var(--border);
+}
+
+.retro-button:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+/* Pixel grid background pattern */
+.pixel-grid {
+  background-image: 
+    linear-gradient(90deg, rgba(120, 68, 33, 0.1) 1px, transparent 1px),
+    linear-gradient(rgba(120, 68, 33, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Progress bar styling for pet happiness meter */
+.retro-progress {
+  @apply bg-muted border-2 border-border h-4;
+  border-style: solid;
+  image-rendering: pixelated;
+}
+
+.retro-progress-fill {
+  @apply bg-primary h-full;
+  image-rendering: pixelated;
+}
