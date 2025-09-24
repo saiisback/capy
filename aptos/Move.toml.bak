@@ -1,0 +1,9 @@
+[package]
+name = "capy"
+version = "0.0.1"
+
+[dependencies]
+AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework", rev = "main" }
+
+[addresses]
+capy = "0xbe2eddc17bc103bbf2b7171b538c340fc1b7bf92a27fec0e5ae80984de635eac"

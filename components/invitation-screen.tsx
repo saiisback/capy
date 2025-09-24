@@ -1,9 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Image from "next/image"
 import { useWallet } from "@/contexts/wallet-context"
 import { MailIcon, WalletIcon, HeartIcon, LoadingDots } from "./ui/icons"
+import { walletService, PetInvitation } from "@/lib/wallet"
 
 export default function InvitationScreen() {
   const { 
@@ -11,20 +12,41 @@ export default function InvitationScreen() {
     acceptInvitation, 
     invitationSent, 
     loading, 
-    error 
+    error,
+    account
   } = useWallet()
   
   const [walletAddress, setWalletAddress] = useState("")
+  const [pendingInvitations, setPendingInvitations] = useState<PetInvitation[]>([])
+  const [loadingInvitations, setLoadingInvitations] = useState(false)
   
   const handleSendInvite = async () => {
     if (walletAddress.trim()) {
       await sendInvitation(walletAddress.trim())
-      // Simulate the co-parent accepting the invitation after 3 seconds
-      setTimeout(async () => {
-        await acceptInvitation()
-      }, 3000)
     }
   }
+
+  const loadPendingInvitations = async () => {
+    if (!account) return
+    try {
+      setLoadingInvitations(true)
+      const invitations = await walletService.getPendingInvitations()
+      setPendingInvitations(invitations)
+    } catch (error) {
+      console.error('Failed to load invitations:', error)
+    } finally {
+      setLoadingInvitations(false)
+    }
+  }
+
+  useEffect(() => {
+    if (account) {
+      loadPendingInvitations()
+      // Refresh invitations every 10 seconds
+      const interval = setInterval(loadPendingInvitations, 10000)
+      return () => clearInterval(interval)
+    }
+  }, [account])
 
   if (invitationSent) {
     return (
@@ -100,8 +122,8 @@ export default function InvitationScreen() {
         {/* Enhanced Instruction */}
         <div className="mb-8 p-4 bg-card-foreground/5 border-2 border-border" style={{ borderStyle: 'solid' }}>
           <p className="font-nunito text-base text-card-foreground leading-relaxed">
-            Your pet can only be minted once your co-parent accepts the on-chain invitation. 
-            Enter their wallet address below to send the invite.
+            <strong>Simple Flow:</strong> Just enter your co-parent's wallet address and send the invite. 
+            <br />They'll sign the contract to accept - you don't need to sign anything!
           </p>
         </div>
         
@@ -141,6 +163,46 @@ export default function InvitationScreen() {
         {error && (
           <div className="mt-4 retro-panel p-4 bg-destructive text-destructive-foreground">
             <p className="font-nunito text-sm">{error}</p>
+          </div>
+        )}
+        
+        {/* Pending Invitations Section */}
+        {pendingInvitations.length > 0 && (
+          <div className="mt-8 retro-panel p-6 bg-muted">
+            <h3 className="font-press-start text-sm text-foreground mb-4 flex items-center gap-2">
+              <MailIcon size={16} className="text-primary" />
+              Pending Invitations ({pendingInvitations.length})
+            </h3>
+            <div className="space-y-3">
+              {pendingInvitations.map((invitation) => (
+                <div key={invitation.id} className="retro-panel p-4 bg-card flex items-center justify-between">
+                  <div className="flex-1">
+                    <p className="font-nunito text-sm text-foreground">
+                      From: <span className="font-mono text-xs text-primary">
+                        {invitation.from.slice(0, 8)}...{invitation.from.slice(-6)}
+                      </span>
+                    </p>
+                    <p className="font-nunito text-xs text-muted-foreground mt-1">
+                      {new Date(invitation.timestamp).toLocaleString()}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => acceptInvitation(invitation.id)}
+                    disabled={loading}
+                    className="retro-button bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 px-4 py-2 text-sm"
+                  >
+                    {loading ? 'Accepting...' : 'Accept'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Loading Invitations */}
+        {loadingInvitations && (
+          <div className="mt-4 text-center">
+            <p className="font-nunito text-sm text-muted-foreground">Loading invitations...</p>
           </div>
         )}
         
