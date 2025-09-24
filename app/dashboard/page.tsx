@@ -7,7 +7,7 @@ import Navbar from "@/components/navbar"
 import DashboardScreen from "@/components/dashboard-screen"
 
 export default function DashboardPage() {
-  const { connected, invitationAccepted } = useWallet()
+  const { connected } = useWallet()
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
 
@@ -19,15 +19,10 @@ export default function DashboardPage() {
       return
     }
     
-    // Check if invitation is accepted
-    if (!invitationAccepted) {
-      // Redirect to invitation if not accepted
-      router.push('/invitation')
-      return
-    }
-    
+    // Allow access to dashboard even without accepted invitation
+    // The dashboard will show appropriate messaging for users without pets
     setIsLoading(false)
-  }, [connected, invitationAccepted, router])
+  }, [connected, router])
 
   if (isLoading) {
     return (

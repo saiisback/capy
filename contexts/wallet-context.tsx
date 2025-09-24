@@ -27,6 +27,7 @@ interface WalletContextType {
   acceptInvitation: () => Promise<void>
   feedPet: () => Promise<void>
   showLoveToPet: () => Promise<void>
+  refreshCoParentData: () => Promise<void>
   
   // State management
   loading: boolean
@@ -112,12 +113,21 @@ export function WalletProvider({ children }: WalletProviderProps) {
           const walletAccount = await walletService.connect(aptosAccount)
           setAccount(walletAccount)
           
-          const currentCoParent = walletService.getCoParent()
-          const pairs = walletService.getCoParentPairs()
-          
-          setCoParent(currentCoParent)
-          setCoParentPair(pairs[0] || null)
-          setInvitationAccepted(!!currentCoParent)
+          // Load co-parent data from blockchain (this may fail for uninitialized users)
+          try {
+            const pairs = await walletService.loadCoParentPairsFromBlockchain()
+            const currentCoParent = walletService.getCoParent()
+            
+            setCoParent(currentCoParent)
+            setCoParentPair(pairs[0] || null)
+            setInvitationAccepted(!!currentCoParent)
+          } catch (coParentError) {
+            // This is normal for new users who haven't been initialized yet
+            console.log('No co-parent data available (user may not be initialized yet)')
+            setCoParent(null)
+            setCoParentPair(null)
+            setInvitationAccepted(false)
+          }
           setError(null) // Clear any previous errors
           setManualConnected(true) // Set manual connected state
           console.log('Wallet connected successfully')
@@ -240,8 +250,13 @@ export function WalletProvider({ children }: WalletProviderProps) {
       }
 
       const pair = await walletService.acceptInvitation(pendingInvitations[0].id)
-      setCoParentPair(pair)
-      setCoParent(walletService.getCoParent())
+      
+      // Reload co-parent data from blockchain after accepting invitation
+      const pairs = await walletService.loadCoParentPairsFromBlockchain()
+      const currentCoParent = walletService.getCoParent()
+      
+      setCoParentPair(pairs[0] || pair)
+      setCoParent(currentCoParent)
       setInvitationAccepted(true)
       
     } catch (err) {
@@ -291,6 +306,29 @@ export function WalletProvider({ children }: WalletProviderProps) {
     }
   }
 
+  const refreshCoParentData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      // Reload co-parent data from blockchain
+      const pairs = await walletService.loadCoParentPairsFromBlockchain()
+      const currentCoParent = walletService.getCoParent()
+      
+      setCoParent(currentCoParent)
+      setCoParentPair(pairs[0] || null)
+      setInvitationAccepted(!!currentCoParent)
+      
+    } catch (err) {
+      // Don't show error for uninitialized users - this is normal
+      if (!String(err).includes('E_NOT_INITIALIZED')) {
+        setError(err instanceof Error ? err.message : 'Failed to refresh co-parent data')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Determine if wallet is actually connected
   const isActuallyConnected = Boolean(manualConnected || (aptosConnected && aptosAccount && account) || (account && typeof window !== 'undefined' && window.aptos))
   
@@ -322,6 +360,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
     acceptInvitation,
     feedPet,
     showLoveToPet,
+    refreshCoParentData,
   }
 
   return (

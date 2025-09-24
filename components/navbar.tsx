@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useWallet } from "@/contexts/wallet-context"
 import { WalletIcon, MailIcon, PetIcon, HeartIcon } from "./ui/icons"
 import { shortenAddress } from "@/lib/wallet"
@@ -20,20 +21,20 @@ export default function Navbar() {
 
         {/* Navigation Links */}
         <div className="flex items-center gap-6">
-          <a 
+          <Link 
             href="/invitation" 
             className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <MailIcon size={16} />
             Invitation
-          </a>
-          <a 
+          </Link>
+          <Link 
             href="/dashboard" 
             className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <PetIcon size={16} />
             Dashboard
-          </a>
+          </Link>
         </div>
 
         {/* Wallet Info */}
@@ -54,13 +55,13 @@ export default function Navbar() {
               </button>
             </div>
           ) : (
-            <a 
+            <Link 
               href="/" 
               className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <WalletIcon size={16} />
               Connect Wallet
-            </a>
+            </Link>
           )}
         </div>
       </div>

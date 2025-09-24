@@ -25,6 +25,7 @@ export default function DashboardScreen() {
     coParentPair, 
     feedPet, 
     showLoveToPet, 
+    refreshCoParentData,
     loading 
   } = useWallet()
   const [happiness, setHappiness] = useState(75)
@@ -278,64 +279,115 @@ export default function DashboardScreen() {
           <div className="w-full h-1 bg-primary/20"></div>
         </div>
 
-        {/* Co-Parent Display */}
+        {/* Pet Access & Co-Parent Display */}
         <div className="mb-8">
           <div className="retro-panel p-6 max-w-4xl mx-auto">
-            <div className="flex items-center gap-2 mb-4">
-              <WalletIcon size={18} className="text-card-foreground" />
-              <h2 className="font-pixel text-lg text-card-foreground">
-                CO-PARENTS
-              </h2>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <PetIcon size={18} className="text-card-foreground" />
+                <h2 className="font-pixel text-lg text-card-foreground">
+                  PET ACCESS & CO-PARENTS
+                </h2>
+              </div>
+              <button
+                onClick={refreshCoParentData}
+                disabled={loading}
+                className="retro-button bg-muted text-muted-foreground hover:bg-muted/80 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 text-xs flex items-center gap-1"
+              >
+                <ClockIcon size={12} />
+                {loading ? 'REFRESHING...' : 'REFRESH'}
+              </button>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Current User */}
-              <div className="flex items-center gap-3 p-4 bg-card-foreground/5 border border-border">
-                <div className="status-indicator status-online"></div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <WalletIcon size={14} className="text-primary" />
-                    <span className="font-nunito text-sm font-semibold text-card-foreground">
-                      You
-                    </span>
-                    <span className={`font-nunito text-xs ${getAccountTypeColor(account?.accountType || '')}`}>
-                      {account?.accountType}
+            {coParentPair && coParent ? (
+              <div className="space-y-4">
+                {/* Pet Status */}
+                <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <PetIcon size={16} className="text-primary" />
+                    <span className="font-nunito text-sm font-semibold text-primary">
+                      🐾 Your Pet is Ready!
                     </span>
                   </div>
-                  <p className="font-mono text-xs text-card-foreground/70">
-                    {shortenAddress(account?.address || '')}
+                  <p className="text-xs text-card-foreground/70 font-nunito">
+                    You and your co-parent can now care for your shared pet together.
                   </p>
                 </div>
-              </div>
-              
-              {/* Co-Parent */}
-              <div className="flex items-center gap-3 p-4 bg-card-foreground/5 border border-border">
-                <div className="status-indicator status-online"></div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <WalletIcon size={14} className="text-secondary" />
-                    <span className="font-nunito text-sm font-semibold text-card-foreground">
-                      Co-Parent
-                    </span>
-                    <span className={`font-nunito text-xs ${getAccountTypeColor(coParent?.accountType || '')}`}>
-                      {coParent?.accountType || 'Ed25519'}
-                    </span>
+                
+                {/* Co-Parents Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Current User */}
+                  <div className="flex items-center gap-3 p-4 bg-card-foreground/5 border border-border">
+                    <div className="status-indicator status-online"></div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <WalletIcon size={14} className="text-primary" />
+                        <span className="font-nunito text-sm font-semibold text-card-foreground">
+                          You
+                        </span>
+                        <span className={`font-nunito text-xs ${getAccountTypeColor(account?.accountType || '')}`}>
+                          {account?.accountType}
+                        </span>
+                      </div>
+                      <p className="font-mono text-xs text-card-foreground/70">
+                        {shortenAddress(account?.address || '')}
+                      </p>
+                    </div>
                   </div>
-                  <p className="font-mono text-xs text-card-foreground/70">
-                    {shortenAddress(coParent?.address || '')}
-                  </p>
+                  
+                  {/* Co-Parent */}
+                  <div className="flex items-center gap-3 p-4 bg-card-foreground/5 border border-border">
+                    <div className="status-indicator status-online"></div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <WalletIcon size={14} className="text-secondary" />
+                        <span className="font-nunito text-sm font-semibold text-card-foreground">
+                          Co-Parent
+                        </span>
+                        <span className={`font-nunito text-xs ${getAccountTypeColor(coParent?.accountType || '')}`}>
+                          {coParent?.accountType || 'Ed25519'}
+                        </span>
+                      </div>
+                      <p className="font-mono text-xs text-card-foreground/70">
+                        {shortenAddress(coParent?.address || '')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Pet Creation Info */}
+                <div className="mt-4 text-center">
+                  <div className="flex items-center justify-center gap-2 text-xs text-card-foreground/50">
+                    <HeartIcon size={12} className="text-primary" />
+                    <span className="font-nunito">
+                      Pet created on {new Date(coParentPair.createdAt).toLocaleDateString()}
+                    </span>
+                    <HeartIcon size={12} className="text-primary" />
+                  </div>
                 </div>
               </div>
-            </div>
-            
-            {coParentPair && (
-              <div className="mt-4 text-center">
+            ) : (
+              <div className="text-center py-8">
+                <div className="mb-4">
+                  <PetIcon size={32} className="text-card-foreground/30 mx-auto" />
+                </div>
+                <h3 className="font-pixel text-md text-card-foreground mb-2">
+                  No Pet Access Yet
+                </h3>
+                <p className="text-xs text-card-foreground/70 font-nunito mb-4">
+                  Accept an invitation to start caring for a shared pet with a co-parent.
+                </p>
                 <div className="flex items-center justify-center gap-2 text-xs text-card-foreground/50">
                   <HeartIcon size={12} className="text-primary" />
                   <span className="font-nunito">
-                    Pet created on {new Date(coParentPair.createdAt).toLocaleDateString()}
+                    Check your invitations to get started
                   </span>
                   <HeartIcon size={12} className="text-primary" />
+                </div>
+                <div className="mt-4 p-3 bg-muted/20 border border-muted/30 rounded-lg">
+                  <p className="text-xs text-card-foreground/60 font-nunito">
+                    💡 <strong>Tip:</strong> You'll be automatically initialized when you accept your first invitation!
+                  </p>
                 </div>
               </div>
             )}
