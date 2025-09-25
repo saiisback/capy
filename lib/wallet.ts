@@ -65,6 +65,11 @@ const getWallet = () => {
 const parseIdFromView = (data: any): number | null => {
   if (data === null || data === undefined) return null;
 
+  // Handle empty arrays
+  if (Array.isArray(data) && data.length === 0) {
+    return null;
+  }
+
   // Direct number or string
   if (typeof data === 'number') return data;
   if (typeof data === 'string') {
@@ -213,7 +218,7 @@ class AptosWalletService {
       const wallet = getWallet();
       const transaction = {
         function: `${CONTRACT_ADDRESS}::capy::send_invitation`,
-        arguments: [toAddress], // The sender is implicit in the transaction
+        arguments: [this.account.address, toAddress], // Pass both sender and recipient addresses
         type: 'entry_function_payload',
         type_arguments: []
       };
@@ -298,6 +303,7 @@ class AptosWalletService {
     if (!this.account) return [];
     
     try {
+        console.log('DEBUG: Getting invitations for user:', this.account.address);
         const invitationIds: any[] = await aptos.view({
         payload: {
           function: `${CONTRACT_ADDRESS}::capy::get_user_invitations_view`,
@@ -305,7 +311,15 @@ class AptosWalletService {
         },
         });
 
+        console.log('DEBUG: Raw invitation IDs:', invitationIds);
         const invitations: PetInvitation[] = [];
+        
+        // Check if invitationIds is empty or not an array
+        if (!Array.isArray(invitationIds) || invitationIds.length === 0) {
+            console.log('DEBUG: No invitations found for user');
+            return invitations;
+        }
+        
         for (const rawId of invitationIds) {
             const id = parseIdFromView(rawId);
             if (!id) continue;
@@ -318,9 +332,16 @@ class AptosWalletService {
                     },
                 });
 
-                const [invId, from, to, status, createdAt] = invData;
+                console.log('DEBUG: Raw invitation data:', invData);
+                
+                // The data comes back as an array with an object, so we need to access the first element
+                const invitationData = invData[0];
+                const { id: invId, from, to, status, created_at: createdAt } = invitationData;
+                
+                console.log('DEBUG: Parsed invitation details:', { invId, from, to, status, createdAt, currentUser: this.account.address });
                 // Status 0 means 'Pending' in the contract
               if (to === this.account.address && status === 0) {
+                console.log('DEBUG: Adding invitation to list');
                 invitations.push({
                         id: invId.toString(),
                         from: from,
@@ -328,6 +349,8 @@ class AptosWalletService {
                   status: 'pending',
                         timestamp: parseInt(createdAt.toString()),
                     });
+                } else {
+                    console.log('DEBUG: Invitation not for this user or not pending');
                 }
             } catch (err) {
                 console.error(`Failed to fetch details for invitation ID ${id}:`, err);
@@ -488,6 +511,12 @@ class AptosWalletService {
       });
 
       const pairs: CoParentPair[] = [];
+      
+      // Check if pairIds is empty or not an array
+      if (!Array.isArray(pairIds) || pairIds.length === 0) {
+        return pairs;
+      }
+      
       for (const rawId of pairIds) {
         const id = parseIdFromView(rawId);
         if (!id) continue;
@@ -564,7 +593,7 @@ class AptosWalletService {
           const itemData: any[] = await aptos.view({
             payload: {
               function: `${CONTRACT_ADDRESS}::capy::get_marketplace_item_view`,
-              functionArguments: [CONTRACT_ADDRESS, itemId],
+              functionArguments: [CONTRACT_ADDRESS, itemId.toString()],
             },
           });
 
@@ -589,6 +618,110 @@ class AptosWalletService {
     } catch (error) {
       console.error('Failed to load detailed inventory:', error);
       return [];
+    }
+  }
+
+  /**
+   * Gets all pet NFT IDs for a user
+   * @param userAddress The user's address
+   * @returns Promise<string[]> Array of pet NFT IDs
+   */
+  async getUserPetNFTs(userAddress: string): Promise<string[]> {
+    if (!isContractDeployed()) throw new Error('Contract address not configured.');
+    
+    try {
+      const petIds: any[] = await aptos.view({
+        payload: {
+          function: `${CONTRACT_ADDRESS}::capy::get_user_pet_nfts_view`,
+          functionArguments: [CONTRACT_ADDRESS, userAddress],
+        },
+      });
+
+      return petIds.map(id => id.toString());
+    } catch (error) {
+      console.error('Failed to get user pet NFTs:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Gets detailed information for a specific pet NFT
+   * @param pairId The pair ID of the pet NFT
+   * @returns Promise<any> Pet NFT data
+   */
+  async getPetNFT(pairId: number): Promise<any> {
+    if (!isContractDeployed()) throw new Error('Contract address not configured.');
+    
+    try {
+      const petData: any[] = await aptos.view({
+        payload: {
+          function: `${CONTRACT_ADDRESS}::capy::get_pet_nft_view`,
+          functionArguments: [CONTRACT_ADDRESS, pairId.toString()],
+        },
+      });
+
+      const [id, owner, coParent, petName, petDescription, petMetadataUri, createdAt, claimed] = petData;
+      
+      return {
+        id: id.toString(),
+        owner: owner,
+        co_parent: coParent,
+        pet_name: Buffer.from(petName).toString('utf8'),
+        pet_description: Buffer.from(petDescription).toString('utf8'),
+        pet_metadata_uri: Buffer.from(petMetadataUri).toString('utf8'),
+        created_at: parseInt(createdAt.toString()),
+        claimed: claimed
+      };
+    } catch (error) {
+      console.error('Failed to get pet NFT:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Gets NFT collection information
+   * @returns Promise<any[]> Collection data
+   */
+  async getNFTCollectionInfo(): Promise<any[]> {
+    if (!isContractDeployed()) throw new Error('Contract address not configured.');
+    
+    try {
+      const collectionData: any[] = await aptos.view({
+        payload: {
+          function: `${CONTRACT_ADDRESS}::capy::get_nft_collection_info_view`,
+          functionArguments: [CONTRACT_ADDRESS],
+        },
+      });
+
+      return collectionData;
+    } catch (error) {
+      console.error('Failed to get collection info:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Claims a pet NFT
+   * @param pairId The pair ID of the pet NFT to claim
+   */
+  async claimPetNFT(pairId: string): Promise<void> {
+    if (!this.account) throw new Error('Wallet not connected');
+    if (!isContractDeployed()) throw new Error('Contract address not configured.');
+
+    try {
+      const wallet = getWallet();
+      const transaction = {
+        function: `${CONTRACT_ADDRESS}::capy::claim_pet_nft`,
+        arguments: [pairId],
+        type: 'entry_function_payload',
+        type_arguments: []
+      };
+
+      const response = await wallet.signAndSubmitTransaction({payload: transaction});
+      await aptos.waitForTransaction({ transactionHash: response.hash });
+    } catch (error) {
+      console.error('Failed to claim pet NFT:', error);
+      throw new Error(`Failed to claim pet NFT: ${error}`);
     }
   }
 }
@@ -622,7 +755,7 @@ if (!walletService.getDetailedInventory) {
           const itemData: any[] = await aptos.view({
             payload: {
               function: `${CONTRACT_ADDRESS}::capy::get_marketplace_item_view`,
-              functionArguments: [CONTRACT_ADDRESS, itemId],
+              functionArguments: [CONTRACT_ADDRESS, itemId.toString()],
             },
           });
 
