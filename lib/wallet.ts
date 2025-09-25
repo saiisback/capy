@@ -567,6 +567,63 @@ class AptosWalletService {
   }
 
   /**
+   * Get co-parent pairs for a specific user address
+   * @param userAddress The user's address
+   * @returns Promise<CoParentPair[]> Array of co-parent pairs
+   */
+  async getUserCoParentPairsForAddress(userAddress: string): Promise<CoParentPair[]> {
+    if (!isContractDeployed()) throw new Error('Contract address not configured.');
+    
+    try {
+      // Get user's co-parent pairs from the contract
+      const pairIds: any[] = await aptos.view({
+        payload: {
+          function: `${CONTRACT_ADDRESS}::capy::get_user_pairs_view`,
+          functionArguments: [CONTRACT_ADDRESS, userAddress],
+        },
+      });
+
+      const pairs: CoParentPair[] = [];
+      
+      // Check if pairIds is empty or not an array
+      if (!Array.isArray(pairIds) || pairIds.length === 0) {
+        return pairs;
+      }
+      
+      for (const rawId of pairIds) {
+        const id = parseIdFromView(rawId);
+        if (!id) continue;
+
+        try {
+          const pairData: any[] = await aptos.view({
+            payload: {
+              function: `${CONTRACT_ADDRESS}::capy::get_pair_view`,
+              functionArguments: [CONTRACT_ADDRESS, id],
+            },
+          });
+
+          if (pairData && pairData.length >= 4) {
+            pairs.push({
+              id,
+              parent1: pairData[0],
+              parent2: pairData[1],
+              pet_created: pairData[2],
+              created_at: pairData[3],
+            });
+          }
+        } catch (error) {
+          console.error(`Failed to load pair ${id}:`, error);
+        }
+      }
+
+      return pairs;
+    } catch (error) {
+      console.error('Failed to load co-parent pairs:', error);
+      return [];
+    }
+  }
+
+  /**
    * Gets detailed inventory information for the connected user
    * @returns Promise<any[]> Array of detailed inventory items
    */
@@ -630,26 +687,41 @@ class AptosWalletService {
     if (!isContractDeployed()) throw new Error('Contract address not configured.');
     
     try {
-      const petIds: any[] = await aptos.view({
+      // Get NFTs where user is the owner
+      const ownedPetIds: any[] = await aptos.view({
         payload: {
           function: `${CONTRACT_ADDRESS}::capy::get_user_pet_nfts_view`,
           functionArguments: [CONTRACT_ADDRESS, userAddress],
         },
       });
 
-      console.log('DEBUG: Raw NFT IDs from blockchain:', petIds);
+      console.log('DEBUG: Raw owned NFT IDs from blockchain:', ownedPetIds);
       
-      // Handle nested array structure - flatten if needed
-      let flatIds: any[] = petIds;
-      if (Array.isArray(petIds) && petIds.length > 0 && Array.isArray(petIds[0])) {
-        flatIds = petIds[0];
-        console.log('DEBUG: Flattened NFT IDs:', flatIds);
+      // Get NFTs where user is the co-parent by checking all co-parent pairs
+      const allPairs = await this.getUserCoParentPairsForAddress(userAddress);
+      const coParentPetIds: string[] = [];
+      
+      for (const pair of allPairs) {
+        try {
+          // Get the NFT data for this pair to check if user is co-parent
+          const nftData = await this.getPetNFT(pair.id);
+          if (nftData.co_parent === userAddress) {
+            coParentPetIds.push(pair.id.toString());
+          }
+        } catch (error) {
+          console.error(`Failed to check NFT for pair ${pair.id}:`, error);
+        }
       }
-
-      const result = flatIds.map(id => id.toString()).filter(id => id && id !== 'undefined');
-      console.log('DEBUG: Final NFT IDs:', result);
       
-      return result;
+      console.log('DEBUG: Co-parent NFT IDs:', coParentPetIds);
+      
+      // Combine owned and co-parented NFTs, removing duplicates
+      const allPetIds = [...ownedPetIds.map(id => id.toString()), ...coParentPetIds];
+      const uniquePetIds = [...new Set(allPetIds)].filter(id => id && id !== 'undefined');
+      
+      console.log('DEBUG: Final combined NFT IDs:', uniquePetIds);
+      
+      return uniquePetIds;
     } catch (error) {
       console.error('Failed to get user pet NFTs:', error);
       return [];
