@@ -14,6 +14,12 @@ module capy::capy {
     const E_NOT_AUTHORIZED: u64 = 6;
     const E_COPARENT_PAIR_EXISTS: u64 = 7;
     const E_INVALID_ADDRESS: u64 = 8;
+    const E_INSUFFICIENT_BALANCE: u64 = 9;
+    const E_ITEM_NOT_FOUND: u64 = 10;
+    const E_ITEM_ALREADY_OWNED: u64 = 11;
+    const E_INVALID_ITEM_TYPE: u64 = 12;
+    const E_REWARD_ALREADY_CLAIMED: u64 = 13;
+    const E_INVALID_GAME_SCORE: u64 = 14;
 
     // Structs
     struct Invitation has store, copy, drop {
@@ -33,6 +39,44 @@ module capy::capy {
         created_at: u64,
     }
 
+    // Marketplace item types
+    const ITEM_TYPE_FOOD: u8 = 1;
+    const ITEM_TYPE_TOY: u8 = 2;
+    const ITEM_TYPE_FURNITURE: u8 = 3;
+    const ITEM_TYPE_DECORATION: u8 = 4;
+
+    struct MarketplaceItem has store, copy, drop {
+        id: u64,
+        name: vector<u8>,
+        item_type: u8,
+        price: u64,
+        description: vector<u8>,
+        image_url: vector<u8>,
+        available: bool,
+    }
+
+    struct UserInventory has key, store {
+        owned_items: Table<u64, bool>,
+        total_items: u64,
+    }
+
+    struct GameReward has store, copy, drop {
+        id: u64,
+        user: address,
+        game_type: vector<u8>,
+        score: u64,
+        reward_amount: u64,
+        claimed: bool,
+        created_at: u64,
+    }
+
+    struct RewardPool has key {
+        total_rewards: u64,
+        claimed_rewards: u64,
+        game_rewards: Table<u64, GameReward>,
+        next_reward_id: u64,
+    }
+
     struct CapyData has key {
         invitations: Table<u64, Invitation>,
         co_parent_pairs: Table<u64, CoParentPair>,
@@ -40,6 +84,13 @@ module capy::capy {
         user_pairs: Table<address, vector<u64>>,
         next_invitation_id: u64,
         next_pair_id: u64,
+        // Marketplace
+        marketplace_items: Table<u64, MarketplaceItem>,
+        next_item_id: u64,
+        user_inventory: Table<address, UserInventory>,
+        // Rewards
+        user_rewards: Table<address, vector<u64>>,
+        next_reward_id: u64,
     }
 
     // Global state for invitations that don't require sender initialization
@@ -81,6 +132,34 @@ module capy::capy {
         timestamp: u64,
     }
 
+    #[event]
+    struct ItemPurchasedEvent has store, drop {
+        buyer: address,
+        item_id: u64,
+        item_name: vector<u8>,
+        price: u64,
+        timestamp: u64,
+    }
+
+    #[event]
+    struct GameRewardClaimedEvent has store, drop {
+        user: address,
+        reward_id: u64,
+        game_type: vector<u8>,
+        score: u64,
+        reward_amount: u64,
+        timestamp: u64,
+    }
+
+    #[event]
+    struct PetFedEvent has store, drop {
+        user: address,
+        pair_id: u64,
+        food_item_id: u64,
+        happiness_increase: u64,
+        timestamp: u64,
+    }
+
 
     // Initialize the module
     public entry fun initialize(account: &signer) {
@@ -94,6 +173,11 @@ module capy::capy {
             user_pairs: table::new(),
             next_invitation_id: 1,
             next_pair_id: 1,
+            marketplace_items: table::new(),
+            next_item_id: 1,
+            user_inventory: table::new(),
+            user_rewards: table::new(),
+            next_reward_id: 1,
         });
     }
 
@@ -170,6 +254,11 @@ module capy::capy {
                 user_pairs: table::new(),
                 next_invitation_id: 1,
                 next_pair_id: 1,
+                marketplace_items: table::new(),
+                next_item_id: 1,
+                user_inventory: table::new(),
+                user_rewards: table::new(),
+                next_reward_id: 1,
             });
         };
         
@@ -335,5 +424,182 @@ module capy::capy {
         let pair = table::borrow(&capy_data.co_parent_pairs, pair_id);
         assert!(pair.parent1 == account_addr || pair.parent2 == account_addr, E_NOT_AUTHORIZED);
         // Pet love logic would go here
+    }
+
+    // Marketplace Functions
+    public entry fun add_marketplace_item(
+        account: &signer,
+        name: vector<u8>,
+        item_type: u8,
+        price: u64,
+        description: vector<u8>,
+        image_url: vector<u8>
+    ) acquires CapyData {
+        let account_addr = signer::address_of(account);
+        assert!(exists<CapyData>(account_addr), E_NOT_INITIALIZED);
+        
+        let capy_data = borrow_global_mut<CapyData>(account_addr);
+        let item_id = capy_data.next_item_id;
+        
+        let item = MarketplaceItem {
+            id: item_id,
+            name,
+            item_type,
+            price,
+            description,
+            image_url,
+            available: true,
+        };
+        
+        table::add(&mut capy_data.marketplace_items, item_id, item);
+        capy_data.next_item_id = capy_data.next_item_id + 1;
+    }
+
+    public entry fun purchase_item(account: &signer, item_id: u64) acquires CapyData {
+        let account_addr = signer::address_of(account);
+        assert!(exists<CapyData>(account_addr), E_NOT_INITIALIZED);
+        
+        let capy_data = borrow_global_mut<CapyData>(account_addr);
+        assert!(table::contains(&capy_data.marketplace_items, item_id), E_ITEM_NOT_FOUND);
+        
+        let item = table::borrow_mut(&mut capy_data.marketplace_items, item_id);
+        assert!(item.available, E_ITEM_NOT_FOUND);
+        
+        // Check if user already owns this item
+        if (!table::contains(&capy_data.user_inventory, account_addr)) {
+            move_to(account, UserInventory {
+                owned_items: table::new(),
+                total_items: 0,
+            });
+        };
+        
+        let user_inventory = table::borrow_mut(&mut capy_data.user_inventory, account_addr);
+        assert!(!table::contains(&user_inventory.owned_items, item_id), E_ITEM_ALREADY_OWNED);
+        
+        // Add item to user inventory
+        table::add(&mut user_inventory.owned_items, item_id, true);
+        user_inventory.total_items = user_inventory.total_items + 1;
+        
+        // Emit purchase event
+        event::emit(ItemPurchasedEvent {
+            buyer: account_addr,
+            item_id,
+            item_name: item.name,
+            price: item.price,
+            timestamp: timestamp::now_microseconds(),
+        });
+    }
+
+    public entry fun feed_pet_with_item(account: &signer, pair_id: u64, food_item_id: u64) acquires CapyData {
+        let account_addr = signer::address_of(account);
+        assert!(exists<CapyData>(account_addr), E_NOT_INITIALIZED);
+        
+        let capy_data = borrow_global<CapyData>(account_addr);
+        assert!(table::contains(&capy_data.co_parent_pairs, pair_id), E_INVITATION_NOT_FOUND);
+        
+        let pair = table::borrow(&capy_data.co_parent_pairs, pair_id);
+        assert!(pair.parent1 == account_addr || pair.parent2 == account_addr, E_NOT_AUTHORIZED);
+        
+        // Check if user owns the food item
+        assert!(table::contains(&capy_data.user_inventory, account_addr), E_ITEM_NOT_FOUND);
+        let user_inventory = table::borrow(&capy_data.user_inventory, account_addr);
+        assert!(table::contains(&user_inventory.owned_items, food_item_id), E_ITEM_NOT_FOUND);
+        
+        // Emit pet fed event
+        event::emit(PetFedEvent {
+            user: account_addr,
+            pair_id,
+            food_item_id,
+            happiness_increase: 15, // Food increases happiness by 15
+            timestamp: timestamp::now_microseconds(),
+        });
+    }
+
+    // Reward System Functions
+    public entry fun claim_game_reward(account: &signer, game_type: vector<u8>, score: u64) acquires CapyData {
+        let account_addr = signer::address_of(account);
+        assert!(exists<CapyData>(account_addr), E_NOT_INITIALIZED);
+        assert!(score > 0, E_INVALID_GAME_SCORE);
+        
+        let capy_data = borrow_global_mut<CapyData>(account_addr);
+        let reward_id = capy_data.next_reward_id;
+        
+        // Calculate reward amount based on score (1 APT per 10 points, max 10 APT)
+        let reward_amount = if (score > 100) { 10 } else { score / 10 };
+        if (reward_amount == 0) { reward_amount = 1 }; // Minimum 1 APT reward
+        
+        let reward = GameReward {
+            id: reward_id,
+            user: account_addr,
+            game_type,
+            score,
+            reward_amount,
+            claimed: true,
+            created_at: timestamp::now_microseconds(),
+        };
+        
+        // Add to user rewards
+        if (!table::contains(&capy_data.user_rewards, account_addr)) {
+            table::add(&mut capy_data.user_rewards, account_addr, vector::empty());
+        };
+        let user_rewards = table::borrow_mut(&mut capy_data.user_rewards, account_addr);
+        vector::push_back(user_rewards, reward_id);
+        
+        capy_data.next_reward_id = capy_data.next_reward_id + 1;
+        
+        // Emit reward claimed event
+        event::emit(GameRewardClaimedEvent {
+            user: account_addr,
+            reward_id,
+            game_type,
+            score,
+            reward_amount,
+            timestamp: timestamp::now_microseconds(),
+        });
+    }
+
+    // View Functions for Marketplace
+    public fun get_marketplace_item(capy_addr: address, item_id: u64): MarketplaceItem acquires CapyData {
+        assert!(exists<CapyData>(capy_addr), E_NOT_INITIALIZED);
+        let capy_data = borrow_global<CapyData>(capy_addr);
+        assert!(table::contains(&capy_data.marketplace_items, item_id), E_ITEM_NOT_FOUND);
+        *table::borrow(&capy_data.marketplace_items, item_id)
+    }
+
+    public fun get_user_inventory(capy_addr: address, user_addr: address): vector<u64> acquires CapyData {
+        assert!(exists<CapyData>(capy_addr), E_NOT_INITIALIZED);
+        let capy_data = borrow_global<CapyData>(capy_addr);
+        if (table::contains(&capy_data.user_inventory, user_addr)) {
+            // For now, return empty vector - will be implemented properly later
+            vector::empty()
+        } else {
+            vector::empty()
+        }
+    }
+
+    public fun get_user_rewards(capy_addr: address, user_addr: address): vector<u64> acquires CapyData {
+        assert!(exists<CapyData>(capy_addr), E_NOT_INITIALIZED);
+        let capy_data = borrow_global<CapyData>(capy_addr);
+        if (table::contains(&capy_data.user_rewards, user_addr)) {
+            *table::borrow(&capy_data.user_rewards, user_addr)
+        } else {
+            vector::empty()
+        }
+    }
+
+    // Public view functions for external access
+    #[view]
+    public fun get_marketplace_item_view(capy_addr: address, item_id: u64): MarketplaceItem acquires CapyData {
+        get_marketplace_item(capy_addr, item_id)
+    }
+
+    #[view]
+    public fun get_user_inventory_view(capy_addr: address, user_addr: address): vector<u64> acquires CapyData {
+        get_user_inventory(capy_addr, user_addr)
+    }
+
+    #[view]
+    public fun get_user_rewards_view(capy_addr: address, user_addr: address): vector<u64> acquires CapyData {
+        get_user_rewards(capy_addr, user_addr)
     }
 }
