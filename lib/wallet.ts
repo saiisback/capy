@@ -479,7 +479,6 @@ class AptosWalletService {
     if (!this.account) throw new Error('Wallet not connected');
     
     try {
-      await this.ensureUserInitialized();
       const wallet = getWallet();
       const transaction = {
         function: `${CONTRACT_ADDRESS}::capy::claim_game_reward`,
