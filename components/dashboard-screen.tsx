@@ -46,6 +46,12 @@ export default function DashboardScreen() {
   const [rewardClaimed, setRewardClaimed] = useState(false)
   const [claimingReward, setClaimingReward] = useState(false)
   const [rewardError, setRewardError] = useState<string | null>(null)
+  
+  // NFT state
+  const [userNFTs, setUserNFTs] = useState<any[]>([])
+  const [nftLoading, setNftLoading] = useState(false)
+  const [showNFTs, setShowNFTs] = useState(false)
+  const [collectionInfo, setCollectionInfo] = useState<any>(null)
 
   // Target Practice Game
   const [targets, setTargets] = useState<Array<{id: number, x: number, y: number, size: number}>>([])
@@ -127,6 +133,55 @@ export default function DashboardScreen() {
       console.error('Failed to load inventory:', error)
     } finally {
       setInventoryLoading(false)
+    }
+  }
+
+  const loadUserNFTs = async () => {
+    if (!account?.address) return
+    
+    setNftLoading(true)
+    try {
+      // Get user's NFT IDs
+      const nftIds = await walletService.getUserPetNFTs(account.address)
+      
+      // Get detailed NFT data for each ID
+      const nftPromises = nftIds.map(async (id) => {
+        try {
+          return await walletService.getPetNFT(parseInt(id))
+        } catch (error) {
+          console.error(`Failed to load NFT ${id}:`, error)
+          return null
+        }
+      })
+      
+      const nfts = (await Promise.all(nftPromises)).filter(nft => nft !== null)
+      setUserNFTs(nfts)
+      
+      // Load collection info
+      try {
+        const collectionData = await walletService.getNFTCollectionInfo()
+        setCollectionInfo(collectionData)
+      } catch (error) {
+        console.error('Failed to load collection info:', error)
+      }
+      
+    } catch (error) {
+      console.error('Failed to load user NFTs:', error)
+    } finally {
+      setNftLoading(false)
+    }
+  }
+
+  const claimNFT = async (pairId: string) => {
+    try {
+      setNftLoading(true)
+      await walletService.claimPetNFT(pairId)
+      // Reload NFTs after claiming
+      await loadUserNFTs()
+    } catch (error) {
+      console.error('Failed to claim NFT:', error)
+    } finally {
+      setNftLoading(false)
     }
   }
 
@@ -493,6 +548,8 @@ export default function DashboardScreen() {
                   style={{ 
                     imageRendering: 'pixelated',
                     transform: 'scale(6)',
+                    width: 'auto',
+                    height: 'auto'
                   }}
                 />
               </div>
@@ -602,6 +659,16 @@ export default function DashboardScreen() {
                     🎒 INVENTORY
                   </button>
                 </div>
+                
+                <button
+                  onClick={() => {
+                    setShowNFTs(true)
+                    loadUserNFTs()
+                  }}
+                  className="retro-button bg-accent text-accent-foreground hover:bg-accent/90 w-full flex items-center justify-center gap-2 group transition-all duration-200"
+                >
+                  🐾 MY PET NFTs
+                </button>
               </div>
             </div>
 
@@ -1110,6 +1177,133 @@ export default function DashboardScreen() {
                   className="retro-button bg-muted text-muted-foreground hover:bg-muted/90 px-6 py-3"
                 >
                   Close Inventory
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NFT Modal */}
+      {showNFTs && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-background border-2 border-foreground max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="font-pixel text-3xl text-foreground">🐾 My Pet NFTs</h2>
+                <button
+                  onClick={() => setShowNFTs(false)}
+                  className="text-muted-foreground hover:text-foreground text-2xl"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              {/* Collection Info */}
+              {collectionInfo && (
+                <div className="retro-panel p-4 mb-6">
+                  <h3 className="font-pixel text-lg text-foreground mb-3">📊 Collection Stats</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div>
+                      <div className="text-2xl font-bold text-primary">{collectionInfo[3] || 0}</div>
+                      <div className="text-sm text-muted-foreground">Total Supply</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-secondary">{collectionInfo[4] || 0}</div>
+                      <div className="text-sm text-muted-foreground">Claimed</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-accent">{userNFTs.length}</div>
+                      <div className="text-sm text-muted-foreground">Your NFTs</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-primary">{userNFTs.filter(nft => nft.claimed).length}</div>
+                      <div className="text-sm text-muted-foreground">Claimed</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {nftLoading ? (
+                <div className="text-center py-8">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                  <p className="text-white mt-2">Loading your pet NFTs...</p>
+                </div>
+              ) : userNFTs.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="text-6xl mb-4">🐾</div>
+                  <h3 className="text-2xl font-bold text-foreground mb-2">No Pet NFTs Yet</h3>
+                  <p className="text-muted-foreground mb-6">You don't have any pet NFTs yet</p>
+                  <p className="text-muted-foreground">Accept an invitation to create your first co-parent pet NFT!</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {userNFTs.map((nft) => (
+                    <div key={nft.id} className="retro-panel p-6 hover:scale-105 transition-transform">
+                      <div className="text-center">
+                        <div className="text-4xl mb-3">🐾</div>
+                        
+                        <h3 className="font-pixel text-lg text-foreground mb-2">
+                          {nft.pet_name}
+                        </h3>
+                        
+                        <div className={`inline-block px-3 py-1 rounded-full text-sm font-medium mb-3 ${
+                          nft.claimed ? 'text-green-500 bg-green-500/20' : 'text-yellow-500 bg-yellow-500/20'
+                        }`}>
+                          {nft.claimed ? "✅ Claimed" : "⏳ Pending Claim"}
+                        </div>
+                        
+                        <p className="text-sm text-muted-foreground mb-4 line-clamp-3">
+                          {nft.pet_description}
+                        </p>
+                        
+                        <div className="space-y-2 text-xs text-muted-foreground mb-4">
+                          <div>ID: {nft.id}</div>
+                          <div>Co-Parent: {shortenAddress(nft.co_parent)}</div>
+                          <div>Created: {new Date(nft.created_at / 1000).toLocaleDateString()}</div>
+                        </div>
+                        
+                        {!nft.claimed && (
+                          <button
+                            onClick={() => claimNFT(nft.id)}
+                            disabled={nftLoading}
+                            className="retro-button bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed w-full py-2"
+                          >
+                            {nftLoading ? 'CLAIMING...' : '🎁 CLAIM NFT'}
+                          </button>
+                        )}
+                        
+                        {nft.claimed && (
+                          <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3">
+                            <div className="flex items-center justify-center gap-2 text-green-500 mb-1">
+                              <StarIcon size={14} />
+                              <span className="font-pixel text-sm">CLAIMED!</span>
+                              <StarIcon size={14} />
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              This NFT is now in your wallet
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-8 text-center">
+                <button 
+                  onClick={loadUserNFTs}
+                  disabled={nftLoading}
+                  className="retro-button bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-3 mr-4"
+                >
+                  🔄 Refresh NFTs
+                </button>
+                <button
+                  onClick={() => setShowNFTs(false)}
+                  className="retro-button bg-muted text-muted-foreground hover:bg-muted/90 px-6 py-3"
+                >
+                  Close NFTs
                 </button>
               </div>
             </div>

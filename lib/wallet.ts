@@ -637,7 +637,19 @@ class AptosWalletService {
         },
       });
 
-      return petIds.map(id => id.toString());
+      console.log('DEBUG: Raw NFT IDs from blockchain:', petIds);
+      
+      // Handle nested array structure - flatten if needed
+      let flatIds: any[] = petIds;
+      if (Array.isArray(petIds) && petIds.length > 0 && Array.isArray(petIds[0])) {
+        flatIds = petIds[0];
+        console.log('DEBUG: Flattened NFT IDs:', flatIds);
+      }
+
+      const result = flatIds.map(id => id.toString()).filter(id => id && id !== 'undefined');
+      console.log('DEBUG: Final NFT IDs:', result);
+      
+      return result;
     } catch (error) {
       console.error('Failed to get user pet NFTs:', error);
       return [];
@@ -653,6 +665,8 @@ class AptosWalletService {
     if (!isContractDeployed()) throw new Error('Contract address not configured.');
     
     try {
+      console.log('DEBUG: Getting NFT data for pair ID:', pairId);
+      
       const petData: any[] = await aptos.view({
         payload: {
           function: `${CONTRACT_ADDRESS}::capy::get_pet_nft_view`,
@@ -660,9 +674,11 @@ class AptosWalletService {
         },
       });
 
+      console.log('DEBUG: Raw NFT data from blockchain:', petData);
+
       const [id, owner, coParent, petName, petDescription, petMetadataUri, createdAt, claimed] = petData;
       
-      return {
+      const result = {
         id: id.toString(),
         owner: owner,
         co_parent: coParent,
@@ -672,6 +688,10 @@ class AptosWalletService {
         created_at: parseInt(createdAt.toString()),
         claimed: claimed
       };
+      
+      console.log('DEBUG: Processed NFT data:', result);
+      
+      return result;
     } catch (error) {
       console.error('Failed to get pet NFT:', error);
       throw error;

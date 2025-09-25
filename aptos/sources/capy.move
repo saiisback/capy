@@ -649,15 +649,25 @@ module capy::capy {
         // Create NFT metadata for the sender's account (invitation.from)
         let pet_nft = create_nft_metadata_placeholder(pair_id, invitation.from, account_addr);
         
-        // Store the NFT data
+        // Store the NFT data in the accepter's account
         table::add(&mut capy_data.pet_nfts, pair_id, pet_nft);
         
-        // Add to sender's NFT list
-        if (!table::contains(&capy_data.user_pet_nfts, invitation.from)) {
-            table::add(&mut capy_data.user_pet_nfts, invitation.from, vector::empty());
+        // Add to accepter's NFT list (they can see the NFT)
+        if (!table::contains(&capy_data.user_pet_nfts, account_addr)) {
+            table::add(&mut capy_data.user_pet_nfts, account_addr, vector::empty());
         };
-        let sender_nfts = table::borrow_mut(&mut capy_data.user_pet_nfts, invitation.from);
-        vector::push_back(sender_nfts, pair_id);
+        let accepter_nfts = table::borrow_mut(&mut capy_data.user_pet_nfts, account_addr);
+        vector::push_back(accepter_nfts, pair_id);
+        
+        // Also add to sender's NFT list if they have an account
+        if (exists<CapyData>(invitation.from)) {
+            let sender_capy_data = borrow_global_mut<CapyData>(invitation.from);
+            if (!table::contains(&sender_capy_data.user_pet_nfts, invitation.from)) {
+                table::add(&mut sender_capy_data.user_pet_nfts, invitation.from, vector::empty());
+            };
+            let sender_nfts = table::borrow_mut(&mut sender_capy_data.user_pet_nfts, invitation.from);
+            vector::push_back(sender_nfts, pair_id);
+        };
         
         // Update NFT collection total (increment pending supply)
         if (exists<CapyPetCollection>(@capy)) {
