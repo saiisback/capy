@@ -6,4 +6,4 @@ version = "0.0.1"
 AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework", rev = "aptos-node-v1.8.0" }
 
 [addresses]
-capy = "0x6452e5567c68fecc959b07313751674e3b9b766b31b77443646cfea761c4b1ef"
+capy = "0x5d6605640f430521df2e7da9706ae111f0b3e8b9a6801b57ee4bca03e2ba7668"

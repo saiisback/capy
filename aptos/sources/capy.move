@@ -1,6 +1,7 @@
 module capy::capy {
     use std::signer;
     use std::vector;
+    use std::string::{Self, String};
     use aptos_framework::timestamp;
     use aptos_framework::event;
     use aptos_std::table::{Self, Table};
@@ -20,6 +21,12 @@ module capy::capy {
     const E_INVALID_ITEM_TYPE: u64 = 12;
     const E_REWARD_ALREADY_CLAIMED: u64 = 13;
     const E_INVALID_GAME_SCORE: u64 = 14;
+    const E_COLLECTION_NOT_FOUND: u64 = 15;
+
+    // NFT Collection constants
+    const CAPY_COLLECTION_NAME: vector<u8> = b"Capy Co-Parent Pets";
+    const CAPY_COLLECTION_DESCRIPTION: vector<u8> = b"Digital pets created through co-parent collaboration";
+    const CAPY_COLLECTION_URI: vector<u8> = b"https://capy.app/collection";
 
     // Structs
     struct Invitation has store, copy, drop {
@@ -37,6 +44,27 @@ module capy::capy {
         parent2: address,
         pet_created: bool,
         created_at: u64,
+    }
+
+    // Pet NFT struct - separate from CoParentPair (tracks NFT creation and metadata)
+    struct PetNFT has store, copy, drop {
+        pair_id: u64,
+        owner: address, // The address that should own the NFT (sender)
+        co_parent: address, // The co-parent address
+        pet_name: String,
+        pet_description: String,
+        pet_metadata_uri: String, // URI for NFT metadata
+        created_at: u64,
+        claimed: bool, // Whether the NFT has been claimed/minted
+    }
+
+    // NFT Collection info - tracks collection metadata and supply
+    struct CapyPetCollection has key {
+        collection_name: String,
+        collection_description: String,
+        collection_uri: String,
+        total_supply: u64,
+        claimed_supply: u64, // Number of NFTs actually claimed
     }
 
     // Marketplace item types
@@ -91,6 +119,9 @@ module capy::capy {
         // Rewards
         user_rewards: Table<address, vector<u64>>,
         next_reward_id: u64,
+        // NFT tracking
+        pet_nfts: Table<u64, PetNFT>, // pair_id -> PetNFT
+        user_pet_nfts: Table<address, vector<u64>>, // user -> pair_ids of their NFTs
     }
 
     // Global state for invitations that don't require sender initialization
@@ -160,6 +191,15 @@ module capy::capy {
         timestamp: u64,
     }
 
+    #[event]
+    struct PetNFTMintedEvent has store, drop {
+        pair_id: u64,
+        nft_address: address,
+        owner: address,
+        co_parent: address,
+        timestamp: u64,
+    }
+
 
     // Initialize the module
     public entry fun initialize(account: &signer) {
@@ -178,6 +218,9 @@ module capy::capy {
             user_inventory: table::new(),
             user_rewards: table::new(),
             next_reward_id: 1,
+            // NFT tracking
+            pet_nfts: table::new(),
+            user_pet_nfts: table::new(),
         });
     }
 
@@ -193,8 +236,301 @@ module capy::capy {
         });
     }
 
+    // Initialize NFT collection (called once after deployment)
+    public entry fun initialize_nft_collection(account: &signer) {
+        let account_addr = signer::address_of(account);
+        // Only the module owner can initialize
+        assert!(account_addr == @capy, E_NOT_AUTHORIZED);
+        assert!(!exists<CapyPetCollection>(account_addr), E_ALREADY_INITIALIZED);
+        
+        let collection_name = string::utf8(CAPY_COLLECTION_NAME);
+        let collection_description = string::utf8(CAPY_COLLECTION_DESCRIPTION);
+        let collection_uri = string::utf8(CAPY_COLLECTION_URI);
+        
+        move_to(account, CapyPetCollection {
+            collection_name,
+            collection_description,
+            collection_uri,
+            total_supply: 0,
+            claimed_supply: 0,
+        });
+    }
+
+    // Initialize marketplace items on contract account (called once after deployment)
+    public entry fun initialize_contract_marketplace(account: &signer) acquires CapyData {
+        let account_addr = signer::address_of(account);
+        // Only the module owner can initialize
+        assert!(account_addr == @capy, E_NOT_AUTHORIZED);
+        assert!(exists<CapyData>(account_addr), E_NOT_INITIALIZED);
+        
+        // Add all marketplace items to the contract's marketplace
+        add_marketplace_item(
+            account,
+            b"Premium Cat Food",
+            1, // ITEM_TYPE_FOOD
+            1, // 1 APT
+            b"High-quality cat food that increases happiness by 15",
+            b"/CatPackPaid/CatItems/CatToys/catfood.png"
+        );
+        
+        add_marketplace_item(
+            account,
+            b"Deluxe Fish",
+            1, // ITEM_TYPE_FOOD
+            1, // 1 APT
+            b"Fresh fish that increases happiness by 20",
+            b"/CatPackPaid/CatItems/CatToys/fish.png"
+        );
+        
+        add_marketplace_item(
+            account,
+            b"Special Treats",
+            1, // ITEM_TYPE_FOOD
+            1, // 1 APT
+            b"Special treats that increase happiness by 25",
+            b"/CatPackPaid/CatItems/CatToys/CatBowls.png"
+        );
+        
+        add_marketplace_item(
+            account,
+            b"Blue Ball",
+            2, // ITEM_TYPE_TOY
+            1, // 1 APT
+            b"Interactive blue ball for your pet",
+            b"/CatPackPaid/CatItems/CatToys/BlueBall.gif"
+        );
+        
+        add_marketplace_item(
+            account,
+            b"Mouse Toy",
+            2, // ITEM_TYPE_TOY
+            1, // 1 APT
+            b"Realistic mouse toy for hunting practice",
+            b"/CatPackPaid/CatItems/CatToys/Mouse.gif"
+        );
+        
+        add_marketplace_item(
+            account,
+            b"Laser Pointer",
+            2, // ITEM_TYPE_TOY
+            1, // 1 APT
+            b"High-tech laser pointer for endless fun",
+            b"/CatPackPaid/CatItems/CatToys/CatToy.gif"
+        );
+        
+        add_marketplace_item(
+            account,
+            b"Blue Cat Bed",
+            3, // ITEM_TYPE_FURNITURE
+            1, // 1 APT
+            b"Comfortable blue bed for your pet",
+            b"/CatPackPaid/CatItems/Beds/CatBedBlue.png"
+        );
+        
+        add_marketplace_item(
+            account,
+            b"Purple Cat Bed",
+            3, // ITEM_TYPE_FURNITURE
+            1, // 1 APT
+            b"Luxurious purple bed for your pet",
+            b"/CatPackPaid/CatItems/Beds/CatBedPurple.png"
+        );
+        
+        add_marketplace_item(
+            account,
+            b"Cat Home",
+            3, // ITEM_TYPE_FURNITURE
+            1, // 1 APT
+            b"Complete cat home with multiple rooms",
+            b"/CatPackPaid/CatItems/Beds/CatHomes.png"
+        );
+        
+        add_marketplace_item(
+            account,
+            b"Flower Pot",
+            4, // ITEM_TYPE_DECORATION
+            1, // 1 APT
+            b"Beautiful flower pot to decorate the room",
+            b"/CatPackPaid/CatItems/Decorations/CatRoomDecorations.png"
+        );
+        
+        add_marketplace_item(
+            account,
+            b"Wall Art",
+            4, // ITEM_TYPE_DECORATION
+            1, // 1 APT
+            b"Elegant wall art for the pet room",
+            b"/CatPackPaid/CatItems/Decorations/CatRoomDecorations.png"
+        );
+        
+        add_marketplace_item(
+            account,
+            b"Puzzle Game",
+            2, // ITEM_TYPE_TOY
+            1, // 1 APT
+            b"Interactive puzzle game to keep your pet entertained",
+            b"/CatPackPaid/CatItems/PlayGrounds/CatPlayGround.png"
+        );
+        
+        add_marketplace_item(
+            account,
+            b"Arcade Machine",
+            2, // ITEM_TYPE_TOY
+            1, // 1 APT
+            b"Retro arcade machine for gaming fun",
+            b"/CatPackPaid/CatItems/PlayGrounds/CatPlayGround.png"
+        );
+    }
+
+    // Update marketplace item prices (only contract owner can call)
+    public entry fun update_marketplace_prices(account: &signer) acquires CapyData {
+        let account_addr = signer::address_of(account);
+        // Only the module owner can update prices
+        assert!(account_addr == @capy, E_NOT_AUTHORIZED);
+        assert!(exists<CapyData>(account_addr), E_NOT_INITIALIZED);
+        
+        let capy_data = borrow_global_mut<CapyData>(account_addr);
+        
+        // Update prices for all items (0.5 to 0.9 APT range)
+        // Item 1: Premium Cat Food - 0.5 APT
+        if (table::contains(&capy_data.marketplace_items, 1)) {
+            let item = table::borrow_mut(&mut capy_data.marketplace_items, 1);
+            item.price = 500000; // 0.5 APT in micro APT
+        };
+        
+        // Item 2: Deluxe Fish - 0.6 APT
+        if (table::contains(&capy_data.marketplace_items, 2)) {
+            let item = table::borrow_mut(&mut capy_data.marketplace_items, 2);
+            item.price = 600000; // 0.6 APT in micro APT
+        };
+        
+        // Item 3: Special Treats - 0.7 APT
+        if (table::contains(&capy_data.marketplace_items, 3)) {
+            let item = table::borrow_mut(&mut capy_data.marketplace_items, 3);
+            item.price = 700000; // 0.7 APT in micro APT
+        };
+        
+        // Item 4: Blue Ball - 0.5 APT
+        if (table::contains(&capy_data.marketplace_items, 4)) {
+            let item = table::borrow_mut(&mut capy_data.marketplace_items, 4);
+            item.price = 500000; // 0.5 APT in micro APT
+        };
+        
+        // Item 5: Mouse Toy - 0.6 APT
+        if (table::contains(&capy_data.marketplace_items, 5)) {
+            let item = table::borrow_mut(&mut capy_data.marketplace_items, 5);
+            item.price = 600000; // 0.6 APT in micro APT
+        };
+        
+        // Item 6: Laser Pointer - 0.8 APT
+        if (table::contains(&capy_data.marketplace_items, 6)) {
+            let item = table::borrow_mut(&mut capy_data.marketplace_items, 6);
+            item.price = 800000; // 0.8 APT in micro APT
+        };
+        
+        // Item 7: Blue Cat Bed - 0.6 APT
+        if (table::contains(&capy_data.marketplace_items, 7)) {
+            let item = table::borrow_mut(&mut capy_data.marketplace_items, 7);
+            item.price = 600000; // 0.6 APT in micro APT
+        };
+        
+        // Item 8: Purple Cat Bed - 0.8 APT
+        if (table::contains(&capy_data.marketplace_items, 8)) {
+            let item = table::borrow_mut(&mut capy_data.marketplace_items, 8);
+            item.price = 800000; // 0.8 APT in micro APT
+        };
+        
+        // Item 9: Cat Home - 0.9 APT
+        if (table::contains(&capy_data.marketplace_items, 9)) {
+            let item = table::borrow_mut(&mut capy_data.marketplace_items, 9);
+            item.price = 900000; // 0.9 APT in micro APT
+        };
+        
+        // Item 10: Flower Pot - 0.5 APT
+        if (table::contains(&capy_data.marketplace_items, 10)) {
+            let item = table::borrow_mut(&mut capy_data.marketplace_items, 10);
+            item.price = 500000; // 0.5 APT in micro APT
+        };
+        
+        // Item 11: Wall Art - 0.7 APT
+        if (table::contains(&capy_data.marketplace_items, 11)) {
+            let item = table::borrow_mut(&mut capy_data.marketplace_items, 11);
+            item.price = 700000; // 0.7 APT in micro APT
+        };
+        
+        // Item 12: Puzzle Game - 0.7 APT
+        if (table::contains(&capy_data.marketplace_items, 12)) {
+            let item = table::borrow_mut(&mut capy_data.marketplace_items, 12);
+            item.price = 700000; // 0.7 APT in micro APT
+        };
+        
+        // Item 13: Arcade Machine - 0.9 APT
+        if (table::contains(&capy_data.marketplace_items, 13)) {
+            let item = table::borrow_mut(&mut capy_data.marketplace_items, 13);
+            item.price = 900000; // 0.9 APT in micro APT
+        };
+    }
+
+    // Helper function to create NFT metadata for tracking (placeholder until claimed)
+    fun create_nft_metadata_placeholder(pair_id: u64, owner: address, co_parent: address): PetNFT {
+        // Generate unique pet name using pair ID
+        let pet_name_bytes = b"Capy Pet #";
+        let pair_id_bytes = std::bcs::to_bytes(&pair_id);
+        vector::append(&mut pet_name_bytes, pair_id_bytes);
+        let pet_name = string::utf8(pet_name_bytes);
+        
+        // Generate metadata URI
+        let uri_bytes = b"https://capy.app/api/pet/";
+        vector::append(&mut uri_bytes, pair_id_bytes);
+        vector::append(&mut uri_bytes, b"/metadata.json");
+        let metadata_uri = string::utf8(uri_bytes);
+        
+        let pet_description = string::utf8(b"A collaborative digital pet created by co-parents on Capy. This NFT represents the unique bond between two users.");
+        
+        PetNFT {
+            pair_id,
+            owner,
+            co_parent,
+            pet_name,
+            pet_description,
+            pet_metadata_uri: metadata_uri,
+            created_at: timestamp::now_microseconds(),
+            claimed: false,
+        }
+    }
+
+    // Function for users to claim their pet NFT - marks as claimed and emits event
+    public entry fun claim_pet_nft(account: &signer, pair_id: u64) acquires CapyData, CapyPetCollection {
+        let account_addr = signer::address_of(account);
+        assert!(exists<CapyData>(account_addr), E_NOT_INITIALIZED);
+        
+        let capy_data = borrow_global_mut<CapyData>(account_addr);
+        assert!(table::contains(&capy_data.pet_nfts, pair_id), E_INVITATION_NOT_FOUND);
+        
+        let pet_nft = table::borrow_mut(&mut capy_data.pet_nfts, pair_id);
+        assert!(pet_nft.owner == account_addr, E_NOT_AUTHORIZED);
+        assert!(!pet_nft.claimed, E_REWARD_ALREADY_CLAIMED);
+        
+        // Check if NFT collection exists
+        assert!(exists<CapyPetCollection>(@capy), E_COLLECTION_NOT_FOUND);
+        let collection_data = borrow_global_mut<CapyPetCollection>(@capy);
+        
+        // Mark as claimed and update collection supply
+        pet_nft.claimed = true;
+        collection_data.claimed_supply = collection_data.claimed_supply + 1;
+        
+        // Emit NFT claimed event with all the metadata
+        event::emit(PetNFTMintedEvent {
+            pair_id,
+            nft_address: account_addr, // Using claimer's address as NFT identifier
+            owner: account_addr,
+            co_parent: pet_nft.co_parent,
+            timestamp: timestamp::now_microseconds(),
+        });
+    }
+
     // Send invitation to another user - no signature required from sender
-    public entry fun send_invitation(account: &signer, from_address: address, to_address: address) acquires GlobalInvitations {
+    public entry fun send_invitation(_account: &signer, from_address: address, to_address: address) acquires GlobalInvitations {
         assert!(to_address != from_address, E_INVALID_ADDRESS);
         
         // Get the global invitations state (stored at module address)
@@ -242,7 +578,7 @@ module capy::capy {
     }
 
     // Accept invitation - updated to use GlobalInvitations and auto-initialize user
-    public entry fun accept_invitation(account: &signer, invitation_id: u64) acquires GlobalInvitations, CapyData {
+    public entry fun accept_invitation(account: &signer, invitation_id: u64) acquires GlobalInvitations, CapyData, CapyPetCollection {
         let account_addr = signer::address_of(account);
         
         // Initialize user if not already initialized
@@ -259,6 +595,9 @@ module capy::capy {
                 user_inventory: table::new(),
                 user_rewards: table::new(),
                 next_reward_id: 1,
+                // NFT tracking
+                pet_nfts: table::new(),
+                user_pet_nfts: table::new(),
             });
         };
         
@@ -307,7 +646,33 @@ module capy::capy {
         // Increment pair ID
         capy_data.next_pair_id = capy_data.next_pair_id + 1;
         
+        // Create NFT metadata for the sender's account (invitation.from)
+        let pet_nft = create_nft_metadata_placeholder(pair_id, invitation.from, account_addr);
+        
+        // Store the NFT data
+        table::add(&mut capy_data.pet_nfts, pair_id, pet_nft);
+        
+        // Add to sender's NFT list
+        if (!table::contains(&capy_data.user_pet_nfts, invitation.from)) {
+            table::add(&mut capy_data.user_pet_nfts, invitation.from, vector::empty());
+        };
+        let sender_nfts = table::borrow_mut(&mut capy_data.user_pet_nfts, invitation.from);
+        vector::push_back(sender_nfts, pair_id);
+        
+        // Update NFT collection total (increment pending supply)
+        if (exists<CapyPetCollection>(@capy)) {
+            let _collection_data = borrow_global_mut<CapyPetCollection>(@capy);
+            // Note: total_supply will be incremented when NFT is actually claimed
+        };
+        
         // Emit events
+        event::emit(PetNFTMintedEvent {
+            pair_id,
+            nft_address: @capy, // NFT metadata created (actual minting when claimed)
+            owner: invitation.from,
+            co_parent: account_addr,
+            timestamp: timestamp::now_microseconds(),
+        });
         event::emit(InvitationAcceptedEvent {
             invitation_id,
             from: invitation.from,
@@ -455,37 +820,45 @@ module capy::capy {
         capy_data.next_item_id = capy_data.next_item_id + 1;
     }
 
-    public entry fun purchase_item(account: &signer, item_id: u64) acquires CapyData {
+    public entry fun purchase_item(account: &signer, item_id: u64) acquires CapyData, UserInventory {
         let account_addr = signer::address_of(account);
         assert!(exists<CapyData>(account_addr), E_NOT_INITIALIZED);
         
-        let capy_data = borrow_global_mut<CapyData>(account_addr);
-        assert!(table::contains(&capy_data.marketplace_items, item_id), E_ITEM_NOT_FOUND);
+        // Get marketplace items from CONTRACT's account (@capy), not buyer's account
+        assert!(exists<CapyData>(@capy), E_NOT_INITIALIZED);
         
-        let item = table::borrow_mut(&mut capy_data.marketplace_items, item_id);
-        assert!(item.available, E_ITEM_NOT_FOUND);
+        // First, get item details from contract's marketplace and store them
+        let (item_name, item_price) = {
+            let contract_capy_data = borrow_global<CapyData>(@capy);
+            assert!(table::contains(&contract_capy_data.marketplace_items, item_id), E_ITEM_NOT_FOUND);
+            
+            let item = table::borrow(&contract_capy_data.marketplace_items, item_id);
+            assert!(item.available, E_ITEM_NOT_FOUND);
+            
+            (item.name, item.price)
+        };
         
         // Check if user already owns this item
-        if (!table::contains(&capy_data.user_inventory, account_addr)) {
+        if (!exists<UserInventory>(account_addr)) {
             move_to(account, UserInventory {
                 owned_items: table::new(),
                 total_items: 0,
             });
         };
         
-        let user_inventory = table::borrow_mut(&mut capy_data.user_inventory, account_addr);
+        let user_inventory = borrow_global_mut<UserInventory>(account_addr);
         assert!(!table::contains(&user_inventory.owned_items, item_id), E_ITEM_ALREADY_OWNED);
         
         // Add item to user inventory
         table::add(&mut user_inventory.owned_items, item_id, true);
         user_inventory.total_items = user_inventory.total_items + 1;
         
-        // Emit purchase event
+        // Emit purchase event with stored values
         event::emit(ItemPurchasedEvent {
             buyer: account_addr,
             item_id,
-            item_name: item.name,
-            price: item.price,
+            item_name,
+            price: item_price,
             timestamp: timestamp::now_microseconds(),
         });
     }
@@ -528,7 +901,7 @@ module capy::capy {
         let reward_amount = if (score > 100) { 10 } else { score / 10 };
         if (reward_amount == 0) { reward_amount = 1 }; // Minimum 1 APT reward
         
-        let reward = GameReward {
+        let _reward = GameReward {
             id: reward_id,
             user: account_addr,
             game_type,
@@ -601,5 +974,45 @@ module capy::capy {
     #[view]
     public fun get_user_rewards_view(capy_addr: address, user_addr: address): vector<u64> acquires CapyData {
         get_user_rewards(capy_addr, user_addr)
+    }
+
+    // NFT View Functions
+    public fun get_pet_nft(capy_addr: address, pair_id: u64): PetNFT acquires CapyData {
+        assert!(exists<CapyData>(capy_addr), E_NOT_INITIALIZED);
+        let capy_data = borrow_global<CapyData>(capy_addr);
+        assert!(table::contains(&capy_data.pet_nfts, pair_id), E_INVITATION_NOT_FOUND);
+        *table::borrow(&capy_data.pet_nfts, pair_id)
+    }
+
+    public fun get_user_pet_nfts(capy_addr: address, user_addr: address): vector<u64> acquires CapyData {
+        assert!(exists<CapyData>(capy_addr), E_NOT_INITIALIZED);
+        let capy_data = borrow_global<CapyData>(capy_addr);
+        if (table::contains(&capy_data.user_pet_nfts, user_addr)) {
+            *table::borrow(&capy_data.user_pet_nfts, user_addr)
+        } else {
+            vector::empty()
+        }
+    }
+
+    #[view]
+    public fun get_pet_nft_view(capy_addr: address, pair_id: u64): PetNFT acquires CapyData {
+        get_pet_nft(capy_addr, pair_id)
+    }
+
+    #[view]
+    public fun get_user_pet_nfts_view(capy_addr: address, user_addr: address): vector<u64> acquires CapyData {
+        get_user_pet_nfts(capy_addr, user_addr)
+    }
+
+    // Get NFT collection info
+    public fun get_nft_collection_info(capy_addr: address): (String, String, String, u64, u64) acquires CapyPetCollection {
+        assert!(exists<CapyPetCollection>(capy_addr), E_COLLECTION_NOT_FOUND);
+        let collection = borrow_global<CapyPetCollection>(capy_addr);
+        (collection.collection_name, collection.collection_description, collection.collection_uri, collection.total_supply, collection.claimed_supply)
+    }
+
+    #[view]
+    public fun get_nft_collection_info_view(capy_addr: address): (String, String, String, u64, u64) acquires CapyPetCollection {
+        get_nft_collection_info(capy_addr)
     }
 }
