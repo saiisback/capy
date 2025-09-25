@@ -12,7 +12,7 @@ interface GameState {
 }
 
 export default function GamesScreen() {
-  const { account, loading } = useWallet()
+  const { account, loading, claimGameReward } = useWallet()
   const [selectedGame, setSelectedGame] = useState<string | null>(null)
   const [gameState, setGameState] = useState<GameState>({
     score: 0,
@@ -20,6 +20,9 @@ export default function GamesScreen() {
     isPlaying: false,
     gameOver: false
   })
+  const [rewardClaimed, setRewardClaimed] = useState(false)
+  const [claimingReward, setClaimingReward] = useState(false)
+  const [rewardError, setRewardError] = useState<string | null>(null)
 
   // Target Practice Game
   const [targets, setTargets] = useState<Array<{id: number, x: number, y: number, size: number}>>([])
@@ -69,6 +72,36 @@ export default function GamesScreen() {
       isPlaying: false,
       gameOver: false
     })
+    setRewardClaimed(false)
+    setRewardError(null)
+  }
+
+  const handleClaimReward = async () => {
+    if (!selectedGame || rewardClaimed) return
+    
+    try {
+      setClaimingReward(true)
+      setRewardError(null)
+      
+      // Call the blockchain function to claim reward
+      await claimGameReward(selectedGame, gameState.score)
+      
+      setRewardClaimed(true)
+      
+    } catch (error) {
+      console.error('Failed to claim reward:', error)
+      setRewardError(error instanceof Error ? error.message : 'Failed to claim reward')
+    } finally {
+      setClaimingReward(false)
+    }
+  }
+
+  const calculateRewardAmount = (score: number): number => {
+    // Match the smart contract logic: 1 APT per 10 points, max 10 APT, min 1 APT
+    const baseReward = Math.floor(score / 10)
+    if (baseReward > 10) return 10
+    if (baseReward < 1) return 1
+    return baseReward
   }
 
   // Target Practice Game Logic
@@ -357,18 +390,75 @@ export default function GamesScreen() {
               {/* Game Over Screen */}
               {gameState.gameOver && (
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-lg">
-                  <div className="bg-background border-2 border-foreground p-8 text-center rounded-lg">
+                  <div className="bg-background border-2 border-foreground p-8 text-center rounded-lg max-w-md">
                     <div className="font-pixel text-3xl text-foreground mb-4">
                       {gameState.score > 50 ? '🎉 Great Job!' : '😊 Good Try!'}
                     </div>
-                    <div className="text-xl text-muted-foreground mb-6">
+                    <div className="text-xl text-muted-foreground mb-4">
                       Final Score: <span className="font-bold text-primary">{gameState.score}</span>
                     </div>
+                    
+                    {/* Reward Information */}
+                    <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 mb-6">
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <StarIcon size={16} className="text-primary" />
+                        <span className="font-pixel text-sm text-primary">REWARD AVAILABLE</span>
+                        <StarIcon size={16} className="text-primary" />
+                      </div>
+                      <div className="text-2xl font-bold text-primary mb-1">
+                        {calculateRewardAmount(gameState.score)} APT
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {gameState.score >= 10 ? 
+                          `${Math.floor(gameState.score / 10)} points earned the reward!` : 
+                          'Minimum 1 APT reward guaranteed!'}
+                      </div>
+                    </div>
+
+                    {/* Claim Button or Status */}
+                    {!rewardClaimed ? (
+                      <div className="space-y-3">
+                        <button
+                          onClick={handleClaimReward}
+                          disabled={claimingReward || loading}
+                          className="retro-button bg-secondary text-secondary-foreground hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed w-full py-3 flex items-center justify-center gap-2"
+                        >
+                          {claimingReward ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                              CLAIMING...
+                            </>
+                          ) : (
+                            <>
+                              🪙 CLAIM {calculateRewardAmount(gameState.score)} APT
+                            </>
+                          )}
+                        </button>
+                        
+                        {rewardError && (
+                          <div className="text-red-500 text-sm bg-red-500/10 border border-red-500/20 rounded p-2">
+                            ❌ {rewardError}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4 mb-4">
+                        <div className="flex items-center justify-center gap-2 text-green-500 mb-2">
+                          <StarIcon size={16} />
+                          <span className="font-pixel text-sm">REWARD CLAIMED!</span>
+                          <StarIcon size={16} />
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {calculateRewardAmount(gameState.score)} APT has been added to your wallet
+                        </div>
+                      </div>
+                    )}
+                    
                     <button
                       onClick={resetGame}
-                      className="retro-button bg-primary text-primary-foreground hover:bg-primary/90 px-6 py-2"
+                      className="retro-button bg-primary text-primary-foreground hover:bg-primary/90 px-6 py-2 mt-4"
                     >
-                      Play Again
+                      {rewardClaimed ? 'Play Again' : 'Skip Reward & Play Again'}
                     </button>
                   </div>
                 </div>

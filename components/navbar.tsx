@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useWallet } from "@/contexts/wallet-context"
-import { WalletIcon, MailIcon, PetIcon, HeartIcon } from "./ui/icons"
+import { WalletIcon, MailIcon, PetIcon, HeartIcon, ShoppingCartIcon } from "./ui/icons"
 import { shortenAddress } from "@/lib/wallet"
 
 export default function Navbar() {
@@ -35,6 +35,14 @@ export default function Navbar() {
             <PetIcon size={16} />
             Dashboard
           </Link>
+          <Link 
+            href="/marketplace" 
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ShoppingCartIcon size={16} />
+            Marketplace
+          </Link>
+        
         </div>
 
         {/* Wallet Info */}

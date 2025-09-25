@@ -29,6 +29,9 @@ interface WalletContextType {
   showLoveToPet: () => Promise<void>
   refreshCoParentData: () => Promise<void>
   
+  // Game reward functions
+  claimGameReward: (gameType: string, score: number) => Promise<void>
+  
   // State management
   loading: boolean
   error: string | null
@@ -255,6 +258,11 @@ export function WalletProvider({ children }: WalletProviderProps) {
       const pairs = await walletService.loadCoParentPairsFromBlockchain()
       const currentCoParent = walletService.getCoParent()
       
+      console.log('DEBUG: Context - pairs from blockchain:', pairs)
+      console.log('DEBUG: Context - pair from acceptInvitation:', pair)
+      console.log('DEBUG: Context - using pair:', pairs[0] || pair)
+      console.log('DEBUG: Context - currentCoParent:', currentCoParent)
+      
       setCoParentPair(pairs[0] || pair)
       setCoParent(currentCoParent)
       setInvitationAccepted(true)
@@ -329,6 +337,20 @@ export function WalletProvider({ children }: WalletProviderProps) {
     }
   }
 
+  const claimGameReward = async (gameType: string, score: number) => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      await walletService.claimGameReward(gameType, score)
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to claim game reward')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Determine if wallet is actually connected
   const isActuallyConnected = Boolean(manualConnected || (aptosConnected && aptosAccount && account) || (account && typeof window !== 'undefined' && window.aptos))
   
@@ -361,6 +383,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
     feedPet,
     showLoveToPet,
     refreshCoParentData,
+    claimGameReward,
   }
 
   return (

@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 import { useWallet } from "@/contexts/wallet-context"
-import { StarIcon, ShoppingCartIcon, HeartIcon, GiftIcon, HomeIcon, GamepadIcon } from "./ui/icons"
+import { walletService } from "@/lib/wallet"
+import { StarIcon, ShoppingCartIcon, HeartIcon } from "./ui/icons"
 
 interface MarketplaceItem {
   id: string
@@ -20,7 +21,7 @@ const marketplaceItems: MarketplaceItem[] = [
     id: 'cat_food_premium',
     name: 'Premium Cat Food',
     description: 'Nutritious and delicious food that makes your pet happy',
-    price: 5,
+    price: 0.5,
     category: 'food',
     rarity: 'common',
     image: '/CatPackPaid/CatItems/CatToys/catfood.png'
@@ -29,7 +30,7 @@ const marketplaceItems: MarketplaceItem[] = [
     id: 'fish_deluxe',
     name: 'Deluxe Fish',
     description: 'Fresh fish that your pet will love',
-    price: 8,
+    price: 0.6,
     category: 'food',
     rarity: 'rare',
     image: '/CatPackPaid/CatItems/CatToys/fish.png'
@@ -38,7 +39,7 @@ const marketplaceItems: MarketplaceItem[] = [
     id: 'treats_special',
     name: 'Special Treats',
     description: 'Rare treats that boost happiness',
-    price: 15,
+    price: 0.7,
     category: 'food',
     rarity: 'epic',
     image: '/CatPackPaid/CatItems/CatToys/catfood.png'
@@ -49,7 +50,7 @@ const marketplaceItems: MarketplaceItem[] = [
     id: 'ball_blue',
     name: 'Blue Ball',
     description: 'A fun blue ball for your pet to play with',
-    price: 3,
+    price: 0.5,
     category: 'toys',
     rarity: 'common',
     image: '/CatPackPaid/CatItems/CatToys/BlueBall.gif'
@@ -58,7 +59,7 @@ const marketplaceItems: MarketplaceItem[] = [
     id: 'mouse_toy',
     name: 'Mouse Toy',
     description: 'Interactive mouse toy that moves',
-    price: 7,
+    price: 0.6,
     category: 'toys',
     rarity: 'rare',
     image: '/CatPackPaid/CatItems/CatToys/Mouse.gif'
@@ -67,7 +68,7 @@ const marketplaceItems: MarketplaceItem[] = [
     id: 'laser_pointer',
     name: 'Laser Pointer',
     description: 'High-tech laser pointer for endless fun',
-    price: 12,
+    price: 0.8,
     category: 'toys',
     rarity: 'epic',
     image: '/CatPackPaid/CatItems/CatToys/CatToy.gif'
@@ -78,7 +79,7 @@ const marketplaceItems: MarketplaceItem[] = [
     id: 'flower_pot',
     name: 'Flower Pot',
     description: 'Beautiful flower pot to decorate your pet\'s room',
-    price: 4,
+    price: 0.5,
     category: 'decorations',
     rarity: 'common',
     image: '/CatPackPaid/CatItems/Decorations/CatRoomDecorations.png'
@@ -87,7 +88,7 @@ const marketplaceItems: MarketplaceItem[] = [
     id: 'wall_art',
     name: 'Wall Art',
     description: 'Elegant wall art for your pet\'s space',
-    price: 10,
+    price: 0.7,
     category: 'decorations',
     rarity: 'rare',
     image: '/CatPackPaid/CatItems/Decorations/CatRoomDecorations.png'
@@ -98,7 +99,7 @@ const marketplaceItems: MarketplaceItem[] = [
     id: 'cat_bed_blue',
     name: 'Blue Cat Bed',
     description: 'Comfortable blue bed for your pet to rest',
-    price: 20,
+    price: 0.6,
     category: 'furniture',
     rarity: 'common',
     image: '/CatPackPaid/CatItems/Beds/CatBedBlue.png'
@@ -107,7 +108,7 @@ const marketplaceItems: MarketplaceItem[] = [
     id: 'cat_bed_purple',
     name: 'Purple Cat Bed',
     description: 'Luxurious purple bed for ultimate comfort',
-    price: 35,
+    price: 0.8,
     category: 'furniture',
     rarity: 'rare',
     image: '/CatPackPaid/CatItems/Beds/CatBedPurple.png'
@@ -116,7 +117,7 @@ const marketplaceItems: MarketplaceItem[] = [
     id: 'cat_home',
     name: 'Cat Home',
     description: 'A cozy home for your pet to live in',
-    price: 50,
+    price: 0.9,
     category: 'furniture',
     rarity: 'epic',
     image: '/CatPackPaid/CatItems/Beds/CatHomes.png'
@@ -127,7 +128,7 @@ const marketplaceItems: MarketplaceItem[] = [
     id: 'puzzle_game',
     name: 'Puzzle Game',
     description: 'Interactive puzzle game to keep your pet entertained',
-    price: 25,
+    price: 0.7,
     category: 'games',
     rarity: 'rare',
     image: '/CatPackPaid/CatItems/PlayGrounds/CatPlayGround.png'
@@ -136,7 +137,7 @@ const marketplaceItems: MarketplaceItem[] = [
     id: 'arcade_machine',
     name: 'Arcade Machine',
     description: 'Retro arcade machine for gaming fun',
-    price: 75,
+    price: 0.9,
     category: 'games',
     rarity: 'legendary',
     image: '/CatPackPaid/CatItems/PlayGrounds/CatPlayGround.png'
@@ -159,10 +160,11 @@ const rarityColors = {
 }
 
 export default function MarketplaceScreen() {
-  const { account, loading } = useWallet()
+  const { account, loading: walletLoading } = useWallet()
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [cart, setCart] = useState<MarketplaceItem[]>([])
   const [showCart, setShowCart] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   const categories = ['all', 'food', 'toys', 'decorations', 'furniture', 'games']
   
@@ -171,7 +173,12 @@ export default function MarketplaceScreen() {
     : marketplaceItems.filter(item => item.category === selectedCategory)
 
   const addToCart = (item: MarketplaceItem) => {
-    setCart([...cart, item])
+    console.log('addToCart called with:', item.name)
+    setCart(prevCart => {
+      const newCart = [...prevCart, item]
+      console.log('Cart updated:', newCart.map(i => i.name))
+      return newCart
+    })
   }
 
   const removeFromCart = (itemId: string) => {
@@ -188,9 +195,78 @@ export default function MarketplaceScreen() {
       return
     }
     
-    // TODO: Implement blockchain purchase
-    alert(`Purchasing ${cart.length} items for ${getTotalPrice()} APT tokens...`)
-    setCart([])
+    try {
+      setLoading(true)
+      
+      // Provide better user feedback about the transaction process
+      alert('🛒 Starting purchase process...\n\n📱 IMPORTANT: A Petra wallet popup should appear for transaction approval.\n\n👀 If you don\'t see a popup:\n• Check if it was blocked by your browser\n• Look for a small wallet icon in your browser\n• Make sure Petra extension is enabled\n\n⏱️ You have up to 60 seconds to approve the transaction.')
+      
+      // For now, we'll purchase items one by one
+      // In a real implementation, you might want to batch purchases
+      for (const item of cart) {
+        // Map frontend item ID to blockchain item ID
+        // For now, we'll use a simple mapping based on item index
+        const blockchainItemId = getBlockchainItemId(item.id)
+        
+        if (blockchainItemId) {
+          await walletService.purchaseItem(blockchainItemId)
+          console.log(`Purchased ${item.name} (ID: ${blockchainItemId})`)
+        } else {
+          console.warn(`No blockchain mapping found for item: ${item.name}`)
+        }
+      }
+      
+      alert(`🎉 Successfully purchased ${cart.length} items!\n\n✅ Items have been added to your inventory.`)
+      setCart([])
+      
+    } catch (error) {
+      console.error('Purchase failed:', error)
+      
+      // Provide specific error messages based on error type
+      let errorMessage = 'Unknown error occurred'
+      const errorString = error instanceof Error ? error.message : String(error)
+      
+      if (errorString.includes('timeout')) {
+        errorMessage = '⏰ Transaction timed out after 60 seconds.\n\n💡 This usually means:\n• The Petra wallet popup didn\'t appear\n• The popup was blocked by your browser\n• You didn\'t approve the transaction in time\n\n🔧 To fix this:\n• Check browser popup blocker settings\n• Look for the Petra extension icon\n• Try the purchase again'
+      } else if (errorString.includes('rejected') || errorString.includes('denied')) {
+        errorMessage = '❌ Transaction was rejected.\n\n💡 To complete your purchase:\n• Click "Purchase Items" again\n• Approve the transaction in your Petra wallet'
+      } else if (errorString.includes('insufficient')) {
+        errorMessage = '💰 Insufficient funds.\n\n💡 Please ensure you have enough APT tokens in your wallet to complete the purchase.'
+      } else if (errorString.includes('Petra wallet not available')) {
+        errorMessage = '👛 Petra wallet not detected.\n\n💡 Please:\n• Install the Petra wallet extension\n• Connect your wallet\n• Refresh the page and try again'
+      } else if (errorString.includes('not connected')) {
+        errorMessage = '🔗 Wallet not connected.\n\n💡 Please connect your Petra wallet first.'
+      } else {
+        errorMessage = `❌ Purchase failed: ${errorString}\n\n💡 Please try again or contact support if the issue persists.`
+      }
+      
+      alert(errorMessage)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Map frontend item IDs to blockchain item IDs
+  const getBlockchainItemId = (frontendItemId: string): number | null => {
+    // This is a simple mapping - in a real app, you'd want to store this mapping
+    // or fetch it from the blockchain
+    const itemMapping: { [key: string]: number } = {
+      'cat_food_premium': 1,
+      'fish_deluxe': 2,
+      'treats_special': 3,
+      'ball_blue': 4,
+      'mouse_toy': 5,
+      'laser_pointer': 6,
+      'flower_pot': 7,
+      'wall_art': 8,
+      'cat_bed_blue': 9,
+      'cat_bed_purple': 10,
+      'cat_home': 11,
+      'puzzle_game': 12,
+      'arcade_machine': 13
+    }
+    
+    return itemMapping[frontendItemId] || null
   }
 
   if (!account) {
@@ -216,8 +292,36 @@ export default function MarketplaceScreen() {
           
           <div className="flex items-center gap-4">
             <button
-              onClick={() => setShowCart(!showCart)}
-              className="retro-button bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2"
+              onClick={async () => {
+                console.log('TEST BUTTON CLICKED!')
+                try {
+                  // Test wallet connection
+                  const { walletService } = await import('@/lib/wallet')
+                  console.log('Wallet service loaded')
+                  console.log('Account:', account)
+                  alert('Test button works! Wallet service loaded.')
+                } catch (error) {
+                  console.error('Wallet test failed:', error)
+                  const errorMessage = error instanceof Error ? error.message : String(error)
+                  alert('Wallet test failed: ' + errorMessage)
+                }
+              }}
+              className="retro-button bg-green-500 text-white hover:bg-green-600 px-4 py-2 cursor-pointer"
+              type="button"
+              style={{ zIndex: 9999, position: 'relative' }}
+            >
+              🧪 Test Wallet
+            </button>
+            <button
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setShowCart(!showCart)
+                console.log('Cart toggled, current cart:', cart)
+              }}
+              className="retro-button bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2 cursor-pointer"
+              type="button"
+              style={{ zIndex: 9999, position: 'relative' }}
             >
               <ShoppingCartIcon size={20} />
               Cart ({cart.length})
@@ -230,12 +334,18 @@ export default function MarketplaceScreen() {
           {categories.map(category => (
             <button
               key={category}
-              onClick={() => setSelectedCategory(category)}
-              className={`retro-button px-4 py-2 ${
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setSelectedCategory(category)
+                console.log('Category selected:', category)
+              }}
+              className={`retro-button px-4 py-2 cursor-pointer ${
                 selectedCategory === category 
                   ? 'bg-primary text-primary-foreground' 
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
               }`}
+              type="button"
             >
               {category === 'all' ? '🏪 All Items' : `${categoryIcons[category as keyof typeof categoryIcons]} ${category.charAt(0).toUpperCase() + category.slice(1)}`}
             </button>
@@ -268,8 +378,14 @@ export default function MarketplaceScreen() {
                 <div className="flex items-center justify-between">
                   <span className="font-pixel text-xl text-primary">{item.price} APT</span>
                   <button
-                    onClick={() => addToCart(item)}
-                    className="retro-button bg-secondary text-secondary-foreground hover:bg-secondary/90 px-3 py-1 text-sm"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      addToCart(item)
+                      console.log('Added to cart:', item.name)
+                    }}
+                    className="retro-button bg-secondary text-secondary-foreground hover:bg-secondary/90 px-3 py-1 text-sm cursor-pointer"
+                    type="button"
                   >
                     Add to Cart
                   </button>
@@ -286,8 +402,14 @@ export default function MarketplaceScreen() {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="font-pixel text-2xl text-foreground">Shopping Cart</h2>
                 <button
-                  onClick={() => setShowCart(false)}
-                  className="text-muted-foreground hover:text-foreground"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setShowCart(false)
+                    console.log('Cart closed')
+                  }}
+                  className="text-muted-foreground hover:text-foreground cursor-pointer"
+                  type="button"
                 >
                   ✕
                 </button>
@@ -304,8 +426,14 @@ export default function MarketplaceScreen() {
                         <p className="text-xs text-muted-foreground">{item.price} APT</p>
                       </div>
                       <button
-                        onClick={() => removeFromCart(item.id)}
-                        className="text-destructive hover:text-destructive/80"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          removeFromCart(item.id)
+                          console.log('Removed from cart:', item.name)
+                        }}
+                        className="text-destructive hover:text-destructive/80 cursor-pointer"
+                        type="button"
                       >
                         Remove
                       </button>
@@ -319,11 +447,19 @@ export default function MarketplaceScreen() {
                     </div>
                     
                     <button
-                      onClick={purchaseItems}
-                      disabled={loading}
-                      className="retro-button bg-primary text-primary-foreground hover:bg-primary/90 w-full py-3 disabled:opacity-50"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        if (!loading && !walletLoading) {
+                          purchaseItems()
+                          console.log('Purchase started for cart:', cart)
+                        }
+                      }}
+                      disabled={loading || walletLoading}
+                      className="retro-button bg-primary text-primary-foreground hover:bg-primary/90 w-full py-3 disabled:opacity-50 cursor-pointer"
+                      type="button"
                     >
-                      {loading ? 'Processing...' : 'Purchase Items'}
+                      {loading ? '🔄 Processing... Check your wallet!' : '🛒 Purchase Items'}
                     </button>
                   </div>
                 </div>

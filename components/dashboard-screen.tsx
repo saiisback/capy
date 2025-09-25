@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import Image from "next/image"
 import { useWallet } from "@/contexts/wallet-context"
-import { shortenAddress, getAccountTypeColor } from "@/lib/wallet"
+import { shortenAddress, getAccountTypeColor, walletService } from "@/lib/wallet"
 import { 
   FoodIcon, 
   HeartIcon, 
@@ -26,19 +26,26 @@ export default function DashboardScreen() {
     feedPet, 
     showLoveToPet, 
     refreshCoParentData,
+    claimGameReward,
     loading 
   } = useWallet()
   const [happiness, setHappiness] = useState(75)
   const [petState, setPetState] = useState("Idle")
   const [showMarketplace, setShowMarketplace] = useState(false)
   const [showGames, setShowGames] = useState(false)
+  const [showInventory, setShowInventory] = useState(false)
   const [selectedGame, setSelectedGame] = useState<string | null>(null)
+  const [inventory, setInventory] = useState<any[]>([])
+  const [inventoryLoading, setInventoryLoading] = useState(false)
   const [gameState, setGameState] = useState({
     score: 0,
     timeLeft: 30,
     isPlaying: false,
     gameOver: false
   })
+  const [rewardClaimed, setRewardClaimed] = useState(false)
+  const [claimingReward, setClaimingReward] = useState(false)
+  const [rewardError, setRewardError] = useState<string | null>(null)
 
   // Target Practice Game
   const [targets, setTargets] = useState<Array<{id: number, x: number, y: number, size: number}>>([])
@@ -96,6 +103,33 @@ export default function DashboardScreen() {
     setTimeout(() => setPetState("Idle"), 2000)
   }
 
+  const handlePutInBox = () => {
+    setPetState("Box")
+    
+    const newEntry = {
+      id: Date.now(),
+      action: "box",
+      text: `Put in box by ${shortenAddress(account?.address || '')} at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+    setDiaryEntries([newEntry, ...diaryEntries.slice(0, 4)])
+    
+    // Reset to idle after 3 seconds
+    setTimeout(() => setPetState("Idle"), 3000)
+  }
+
+  const loadInventory = async () => {
+    setInventoryLoading(true)
+    try {
+      const detailedInventory = await walletService.getDetailedInventory()
+      setInventory(detailedInventory)
+    } catch (error) {
+      console.error('Failed to load inventory:', error)
+    } finally {
+      setInventoryLoading(false)
+    }
+  }
+
   // Game Functions
   const startGame = (gameType: string) => {
     setSelectedGame(gameType)
@@ -134,6 +168,36 @@ export default function DashboardScreen() {
       isPlaying: false,
       gameOver: false
     })
+    setRewardClaimed(false)
+    setRewardError(null)
+  }
+
+  const handleClaimReward = async () => {
+    if (!selectedGame || rewardClaimed) return
+    
+    try {
+      setClaimingReward(true)
+      setRewardError(null)
+      
+      // Call the blockchain function to claim reward
+      await claimGameReward(selectedGame, gameState.score)
+      
+      setRewardClaimed(true)
+      
+    } catch (error) {
+      console.error('Failed to claim reward:', error)
+      setRewardError(error instanceof Error ? error.message : 'Failed to claim reward')
+    } finally {
+      setClaimingReward(false)
+    }
+  }
+
+  const calculateRewardAmount = (score: number): number => {
+    // Match the smart contract logic: 1 APT per 10 points, max 10 APT, min 1 APT
+    const baseReward = Math.floor(score / 10)
+    if (baseReward > 10) return 10
+    if (baseReward < 1) return 1
+    return baseReward
   }
 
   // Target Practice Game Logic
@@ -218,9 +282,11 @@ export default function DashboardScreen() {
   const getPetSprite = () => {
     switch (petState) {
       case "Eating":
-        return "/CatPackPaid/Sprites/Classical/Individual/Eating.png"
+        return "/eating.gif"
       case "Excited":
-        return "/CatPackPaid/Sprites/Classical/Individual/Excited.png"
+        return "/love.gif"
+      case "Box":
+        return "/catbox.gif"
       default:
         return "/catidle.gif"
     }
@@ -232,6 +298,8 @@ export default function DashboardScreen() {
         return <FoodIcon size={12} className="text-secondary" />
       case "love":
         return <HeartIcon size={12} className="text-primary" />
+      case "box":
+        return <span className="text-xs">📦</span>
       case "game":
         return <GameControllerIcon size={12} className="text-accent" />
       default:
@@ -408,13 +476,13 @@ export default function DashboardScreen() {
             </div>
             
             {/* Enhanced Pet Display */}
-            <div className="flex flex-col items-center justify-center h-64 relative group">
+            <div className="flex flex-col items-center justify-center h-64 relative group pt-7">
               {/* Room Background with enhanced styling */}
               <div className="absolute inset-0 bg-gradient-to-b from-transparent to-card/20 rounded-lg"></div>
               <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg"></div>
               
               {/* Pet Sprite with enhanced effects */}
-              <div className="relative z-10 mb-4 group-hover:scale-105 transition-transform duration-300">
+              <div className="relative z-10 mb-4 group-hover:scale-105 transition-transform duration-300 py-50">
                 <div className="absolute -inset-2 bg-primary/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                 <Image
                   src={getPetSprite()}
@@ -438,10 +506,11 @@ export default function DashboardScreen() {
                   </p>
                   <StarIcon size={12} className="text-primary" />
                 </div>
-                <div className="text-xs text-card-foreground/70 font-nunito">
+                <div className="text-xs text-card-foreground/70 font-nunito ">
                   {petState === "Idle" && "Ready for action!"}
                   {petState === "Eating" && "Nom nom nom..."}
                   {petState === "Excited" && "So happy!"}
+                  {petState === "Box" && "Cozy in the box..."}
                 </div>
               </div>
             </div>
@@ -509,12 +578,30 @@ export default function DashboardScreen() {
                 </div>
                 
                 <button
-                  onClick={() => setShowMarketplace(true)}
-                  className="retro-button bg-primary text-primary-foreground hover:bg-primary/90 w-full flex items-center justify-center gap-2 group transition-all duration-200"
+                  onClick={handlePutInBox}
+                  className="retro-button bg-muted text-muted-foreground hover:bg-muted/90 w-full flex items-center justify-center gap-2 group transition-all duration-200"
                 >
-                  <ShoppingCartIcon size={16} className="group-hover:animate-pulse" />
-                  🛒 MARKETPLACE
+                  📦 PUT IN BOX
                 </button>
+                
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowMarketplace(true)}
+                    className="retro-button bg-primary text-primary-foreground hover:bg-primary/90 flex-1 flex items-center justify-center gap-2 group transition-all duration-200"
+                  >
+                    <ShoppingCartIcon size={16} className="group-hover:animate-pulse" />
+                    🛒 MARKETPLACE
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowInventory(true)
+                      loadInventory()
+                    }}
+                    className="retro-button bg-secondary text-secondary-foreground hover:bg-secondary/90 flex-1 flex items-center justify-center gap-2 group transition-all duration-200"
+                  >
+                    🎒 INVENTORY
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -699,18 +786,75 @@ export default function DashboardScreen() {
                 {/* Game Over Screen */}
                 {gameState.gameOver && (
                   <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-lg">
-                    <div className="bg-background border-2 border-foreground p-8 text-center rounded-lg">
+                    <div className="bg-background border-2 border-foreground p-8 text-center rounded-lg max-w-md">
                       <div className="font-pixel text-3xl text-foreground mb-4">
                         {gameState.score > 50 ? '🎉 Great Job!' : '😊 Good Try!'}
                       </div>
-                      <div className="text-xl text-muted-foreground mb-6">
+                      <div className="text-xl text-muted-foreground mb-4">
                         Final Score: <span className="font-bold text-primary">{gameState.score}</span>
                       </div>
+                      
+                      {/* Reward Information */}
+                      <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 mb-6">
+                        <div className="flex items-center justify-center gap-2 mb-2">
+                          <StarIcon size={16} className="text-primary" />
+                          <span className="font-pixel text-sm text-primary">REWARD AVAILABLE</span>
+                          <StarIcon size={16} className="text-primary" />
+                        </div>
+                        <div className="text-2xl font-bold text-primary mb-1">
+                          {calculateRewardAmount(gameState.score)} APT
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {gameState.score >= 10 ? 
+                            `${Math.floor(gameState.score / 10)} points earned the reward!` : 
+                            'Minimum 1 APT reward guaranteed!'}
+                        </div>
+                      </div>
+
+                      {/* Claim Button or Status */}
+                      {!rewardClaimed ? (
+                        <div className="space-y-3">
+                          <button
+                            onClick={handleClaimReward}
+                            disabled={claimingReward || loading}
+                            className="retro-button bg-secondary text-secondary-foreground hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed w-full py-3 flex items-center justify-center gap-2"
+                          >
+                            {claimingReward ? (
+                              <>
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                CLAIMING...
+                              </>
+                            ) : (
+                              <>
+                                🪙 CLAIM {calculateRewardAmount(gameState.score)} APT
+                              </>
+                            )}
+                          </button>
+                          
+                          {rewardError && (
+                            <div className="text-red-500 text-sm bg-red-500/10 border border-red-500/20 rounded p-2">
+                              ❌ {rewardError}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4 mb-4">
+                          <div className="flex items-center justify-center gap-2 text-green-500 mb-2">
+                            <StarIcon size={16} />
+                            <span className="font-pixel text-sm">REWARD CLAIMED!</span>
+                            <StarIcon size={16} />
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {calculateRewardAmount(gameState.score)} APT has been added to your wallet
+                          </div>
+                        </div>
+                      )}
+                      
                       <button
                         onClick={resetGame}
-                        className="retro-button bg-primary text-primary-foreground hover:bg-primary/90 px-6 py-2"
+                        className="retro-button bg-primary text-primary-foreground hover:bg-primary/90 px-6 py-2 mt-4"
                       >
-                        Play Again
+                        {rewardClaimed ? 'Play Again' : 'Skip Reward & Play Again'}
                       </button>
                     </div>
                   </div>
@@ -762,15 +906,15 @@ export default function DashboardScreen() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-2 bg-muted rounded">
                       <span className="text-sm">Premium Cat Food</span>
-                      <span className="text-sm font-bold text-primary">5 APT</span>
+                      <span className="text-sm font-bold text-primary">1 APT</span>
                     </div>
                     <div className="flex items-center justify-between p-2 bg-muted rounded">
                       <span className="text-sm">Deluxe Fish</span>
-                      <span className="text-sm font-bold text-primary">8 APT</span>
+                      <span className="text-sm font-bold text-primary">1 APT</span>
                     </div>
                     <div className="flex items-center justify-between p-2 bg-muted rounded">
                       <span className="text-sm">Special Treats</span>
-                      <span className="text-sm font-bold text-primary">15 APT</span>
+                      <span className="text-sm font-bold text-primary">1 APT</span>
                     </div>
                   </div>
                 </div>
@@ -781,15 +925,15 @@ export default function DashboardScreen() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-2 bg-muted rounded">
                       <span className="text-sm">Blue Ball</span>
-                      <span className="text-sm font-bold text-primary">3 APT</span>
+                      <span className="text-sm font-bold text-primary">1 APT</span>
                     </div>
                     <div className="flex items-center justify-between p-2 bg-muted rounded">
                       <span className="text-sm">Mouse Toy</span>
-                      <span className="text-sm font-bold text-primary">7 APT</span>
+                      <span className="text-sm font-bold text-primary">1 APT</span>
                     </div>
                     <div className="flex items-center justify-between p-2 bg-muted rounded">
                       <span className="text-sm">Laser Pointer</span>
-                      <span className="text-sm font-bold text-primary">12 APT</span>
+                      <span className="text-sm font-bold text-primary">1 APT</span>
                     </div>
                   </div>
                 </div>
@@ -800,15 +944,15 @@ export default function DashboardScreen() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-2 bg-muted rounded">
                       <span className="text-sm">Blue Cat Bed</span>
-                      <span className="text-sm font-bold text-primary">20 APT</span>
+                      <span className="text-sm font-bold text-primary">1 APT</span>
                     </div>
                     <div className="flex items-center justify-between p-2 bg-muted rounded">
                       <span className="text-sm">Purple Cat Bed</span>
-                      <span className="text-sm font-bold text-primary">35 APT</span>
+                      <span className="text-sm font-bold text-primary">1 APT</span>
                     </div>
                     <div className="flex items-center justify-between p-2 bg-muted rounded">
                       <span className="text-sm">Cat Home</span>
-                      <span className="text-sm font-bold text-primary">50 APT</span>
+                      <span className="text-sm font-bold text-primary">1 APT</span>
                     </div>
                   </div>
                 </div>
@@ -819,11 +963,11 @@ export default function DashboardScreen() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-2 bg-muted rounded">
                       <span className="text-sm">Puzzle Game</span>
-                      <span className="text-sm font-bold text-primary">25 APT</span>
+                      <span className="text-sm font-bold text-primary">1 APT</span>
                     </div>
                     <div className="flex items-center justify-between p-2 bg-muted rounded">
                       <span className="text-sm">Arcade Machine</span>
-                      <span className="text-sm font-bold text-primary">75 APT</span>
+                      <span className="text-sm font-bold text-primary">1 APT</span>
                     </div>
                   </div>
                 </div>
@@ -834,11 +978,11 @@ export default function DashboardScreen() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-2 bg-muted rounded">
                       <span className="text-sm">Flower Pot</span>
-                      <span className="text-sm font-bold text-primary">4 APT</span>
+                      <span className="text-sm font-bold text-primary">1 APT</span>
                     </div>
                     <div className="flex items-center justify-between p-2 bg-muted rounded">
                       <span className="text-sm">Wall Art</span>
-                      <span className="text-sm font-bold text-primary">10 APT</span>
+                      <span className="text-sm font-bold text-primary">1 APT</span>
                     </div>
                   </div>
                 </div>
@@ -868,6 +1012,104 @@ export default function DashboardScreen() {
                   className="retro-button bg-primary text-primary-foreground hover:bg-primary/90 px-6 py-2"
                 >
                   Close Marketplace
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Inventory Modal */}
+      {showInventory && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-background border-2 border-foreground max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="font-pixel text-3xl text-foreground">🎒 My Inventory</h2>
+                <button
+                  onClick={() => setShowInventory(false)}
+                  className="text-muted-foreground hover:text-foreground text-2xl"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              {inventoryLoading ? (
+                <div className="text-center py-8">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                  <p className="text-white mt-2">Loading inventory...</p>
+                </div>
+              ) : inventory.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="text-6xl mb-4">📦</div>
+                  <h3 className="text-2xl font-bold text-foreground mb-2">Empty Inventory</h3>
+                  <p className="text-muted-foreground mb-6">You don't have any items yet</p>
+                  <p className="text-muted-foreground">Visit the marketplace to purchase items!</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {inventory.map((item) => (
+                    <div key={item.id} className="retro-panel p-6 hover:scale-105 transition-transform">
+                      <div className="text-center">
+                        <div className="text-4xl mb-3">
+                          {item.image_url ? (
+                            <img 
+                              src={item.image_url} 
+                              alt={item.name}
+                              className="w-16 h-16 object-cover mx-auto rounded"
+                            />
+                          ) : (
+                            "📦"
+                          )}
+                        </div>
+                        
+                        <h3 className="font-pixel text-lg text-foreground mb-2">
+                          {item.name}
+                        </h3>
+                        
+                        <div className={`inline-block px-3 py-1 rounded-full text-sm font-medium mb-3 ${
+                          item.item_type === 1 ? 'text-green-500 bg-green-500/20' :
+                          item.item_type === 2 ? 'text-blue-500 bg-blue-500/20' :
+                          item.item_type === 3 ? 'text-purple-500 bg-purple-500/20' :
+                          item.item_type === 4 ? 'text-pink-500 bg-pink-500/20' :
+                          'text-gray-500 bg-gray-500/20'
+                        }`}>
+                          {item.item_type === 1 ? "🍽️ Food" :
+                           item.item_type === 2 ? "🎾 Toy" :
+                           item.item_type === 3 ? "🛏️ Furniture" :
+                           item.item_type === 4 ? "🎨 Decoration" :
+                           "❓ Unknown"}
+                        </div>
+                        
+                        <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
+                          {item.description}
+                        </p>
+                        
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">ID: {item.id}</span>
+                          <span className="text-primary font-bold">
+                            {item.price} APT
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-8 text-center">
+                <button 
+                  onClick={loadInventory}
+                  disabled={inventoryLoading}
+                  className="retro-button bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-3 mr-4"
+                >
+                  🔄 Refresh Inventory
+                </button>
+                <button
+                  onClick={() => setShowInventory(false)}
+                  className="retro-button bg-muted text-muted-foreground hover:bg-muted/90 px-6 py-3"
+                >
+                  Close Inventory
                 </button>
               </div>
             </div>
